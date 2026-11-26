@@ -177,7 +177,9 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (memberError) throw new HttpError(500, "تعذر التحقق من عضوية الشركة");
     if (!membership) throw new HttpError(403, "حسابك غير مرتبط بهذه الشركة");
-    if (membership.role !== "driver") throw new HttpError(403, "هذه العملية متاحة لحساب السائق فقط");
+    if ((membership as unknown as { role: string }).role !== "driver") {
+      throw new HttpError(403, "هذه العملية متاحة لحساب السائق فقط");
+    }
 
     const { data: vehicle, error: vehicleError } = await admin
       .from("vehicles")
