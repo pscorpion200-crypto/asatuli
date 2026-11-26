@@ -241,6 +241,24 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
 })();
 <\/script>
 <style id="logout-visible-fix">#asatuliLogoutFloat{display:none!important;position:fixed!important;top:12px!important;left:12px!important;z-index:2147483000!important;background:#a83238!important;color:#fff!important;border:1px solid #d36a6e!important;border-radius:12px!important;padding:10px 14px!important;font-weight:900!important;box-shadow:0 8px 24px #1113!important;cursor:pointer!important;visibility:visible!important;opacity:1!important}body:not(.auth-gate):not(.asatuli-driver-mode) #asatuliLogoutFloat{display:block!important}body.asatuli-driver-mode #asatuliLogoutFloat{display:none!important}#asatuliDriverPortal #dpLogout{display:block!important;position:sticky!important;top:8px!important;z-index:1000!important;margin:0 0 18px auto!important;background:#a83238!important;color:white!important;border:0!important;padding:12px 20px!important;font-size:16px!important;font-weight:900!important;border-radius:12px!important;box-shadow:0 4px 15px #1113!important}@media(max-width:700px){#asatuliLogoutFloat{top:10px!important;left:10px!important;padding:9px 11px!important;font-size:13px!important}.top{padding-top:52px!important}}</style><button id="asatuliLogoutFloat" onclick="logoutCloud()" aria-label="تسجيل الخروج">🚪 تسجيل الخروج</button>
+
+<script id="oil-interval-5000">
+(function(){
+ const interval=5000;
+ // Make next oil-change mileage automatic, exactly 5,000 km after the recorded reading.
+ function setupOilForm(){const odo=document.getElementById('dpOilOdo'),next=document.getElementById('dpOilNextOdo');if(!odo||!next||odo.dataset.intervalBound)return;odo.dataset.intervalBound='1';next.readOnly=true;next.placeholder='يُحسب تلقائياً +5000 كم';function calc(){const n=Number(odo.value);next.value=odo.value!==''&&Number.isFinite(n)&&n>=0?String(n+interval):'';}odo.addEventListener('input',calc);calc();}
+ const oilRecord=(m)=>String(m.descr||'').includes('تغيير زيت المحرك');
+ function readOdoFromNotes(m){const s=String(m.notes||'');const a=s.match(/عداد وقت التغيير:\s*(\d+)/);const b=s.match(/العداد القادم:\s*(\d+)/);return {start:a?Number(a[1]):null,next:b?Number(b[1]):null};}
+ function latestOdoFor(v){const vals=(store.fuel||[]).filter(x=>x.vehicle_id===v.id&&x.odo!=null&&Number(x.odo)>0).map(x=>Number(x.odo));return vals.length?Math.max(...vals):null;}
+ function renderOilAlerts(){const dash=document.getElementById('dash');if(!dash||!Array.isArray(store.vehicles))return;let panel=document.getElementById('oilIntervalAlerts');if(!panel){panel=document.createElement('section');panel.className='card section';panel.id='oilIntervalAlerts';panel.innerHTML='<h2>🛢️ متابعة تغيير زيت المحرك (كل 5,000 كم)</h2><div id="oilIntervalRows"></div>';dash.appendChild(panel);}const rows=[];for(const v of store.vehicles){const records=(store.maintenance||[]).filter(m=>m.vehicle_id===v.id&&oilRecord(m)).sort((a,b)=>String(b.day||'').localeCompare(String(a.day||'')));const last=records[0];if(!last){rows.push({plate:v.plate||v.type||'مركبة',text:'لم يُسجّل تغيير زيت بعد',warn:false});continue;}const parsed=readOdoFromNotes(last),start=parsed.start,next=parsed.next||(start!=null?start+interval:null),current=latestOdoFor(v);if(current==null||next==null){rows.push({plate:v.plate||v.type||'مركبة',text:'آخر تغيير: '+(start??'—')+' كم — سجّل قراءة عداد بالتعبئة لتفعيل المتابعة',warn:false});continue;}const remaining=next-current;rows.push({plate:v.plate||v.type||'مركبة',text:'العداد الحالي '+current+' كم — موعد الزيت '+next+' كم — '+(remaining<=0?'تجاوز الموعد بمقدار '+Math.abs(remaining)+' كم': 'باقي '+remaining+' كم'),warn:remaining<=0,soon:remaining>0&&remaining<=1000});}const box=document.getElementById('oilIntervalRows');box.innerHTML=rows.length?rows.map(x=>'<div class="alert"><span><b>'+escHTML(x.plate)+'</b> — '+escHTML(x.text)+'</span><span class="pill '+(x.warn?'warn':x.soon?'warn':'blue')+'">'+(x.warn?'تغيير الزيت مطلوب':x.soon?'قريب':'متابعة')+'</span></div>').join(''):'<div class="sub">لا توجد مركبات.</div>';}
+ // Attach after each cloud refresh/render and initialize when available.
+ const hook=()=>{setupOilForm();try{renderOilAlerts();}catch(e){console.warn('Oil interval alert',e);}};
+ const oldLoad=window.loadCloud; if(typeof oldLoad==='function')window.loadCloud=async function(){const r=await oldLoad.apply(this,arguments);hook();return r;};
+ const oldRender=window.render;if(typeof oldRender==='function')window.render=function(){const r=oldRender.apply(this,arguments);hook();return r;};
+ document.addEventListener('input',e=>{if(e.target&&e.target.id==='dpOilOdo')setupOilForm();});
+ setInterval(()=>{setupOilForm();renderOilAlerts();},2500);
+})();
+</script>
 </body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
