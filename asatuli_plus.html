@@ -184,6 +184,26 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
   }
  };
 })();
+</script><script id="owner-trip-invoice-upload">
+(async function(){try{
+ if(!window.sb||!window.cloudMode||!window.companyId)return;
+ const {data:owner,error:oe}=await sb.rpc('is_company_owner',{p_company_id:companyId});if(oe||owner!==true)return;
+ const host=document.getElementById('ownerTripInvoiceReview');if(!host)return;
+ const panel=document.createElement('div');panel.className='card';panel.style.margin='12px 0';panel.innerHTML='<h3>إرفاق فاتورة برحلة مسجلة</h3><label>اختر الرحلة<select id="ownerInvoiceTrip" style="display:block;width:100%;padding:12px;margin:8px 0;border-radius:10px"></select></label><label>الفواتير (صور أو PDF)<input id="ownerInvoiceFiles" type="file" accept="image/*,.pdf" multiple style="display:block;width:100%;padding:12px;margin:8px 0"></label><button class="btn" id="ownerInvoiceUpload">رفع الفواتير وربطها بالرحلة</button><div id="ownerInvoiceUploadStatus" class="sub" style="margin-top:8px"></div>';
+ host.insertBefore(panel,host.children[1]);
+ const sel=document.getElementById('ownerInvoiceTrip'),status=document.getElementById('ownerInvoiceUploadStatus');
+ const {data:trips,error}=await sb.from('trips').select('id,day,destination,vehicle_id,attachments').eq('company_id',companyId).order('day',{ascending:false}).limit(100);if(error)throw error;
+ sel.innerHTML=trips.map(t=>'<option value="'+t.id+'">'+escHTML(t.day||'')+' — '+escHTML(t.destination||'رحلة')+'</option>').join('')||'<option value="">لا توجد رحلات</option>';
+ document.getElementById('ownerInvoiceUpload').onclick=async()=>{
+ try{const trip=trips.find(t=>t.id===sel.value),files=[...(document.getElementById('ownerInvoiceFiles').files||[])];if(!trip)throw Error('اختر رحلة');if(!files.length)throw Error('اختر ملفات');if(files.length>5)throw Error('الحد الأقصى 5 ملفات');if(files.some(f=>f.size>8*1024*1024||f.size<=0))throw Error('كل ملف يجب أن يكون أقل من 8 ميغابايت');if(files.some(f=>!(f.type==='application/pdf'||f.type.startsWith('image/'))))throw Error('المسموح صور أو PDF فقط');
+ const {data:{user}}=await sb.auth.getUser();if(!user)throw Error('جلسة المستخدم غير متوفرة');
+ status.textContent='جار رفع الملفات...';const paths=[];
+ for(const file of files){const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=companyId+'/'+user.id+'/'+trip.vehicle_id+'/'+trip.id+'/'+Date.now()+'_'+safe;const {error:up}=await sb.storage.from('trip-invoices').upload(path,file,{upsert:false});if(up)throw up;paths.push(path);}
+ const existing=Array.isArray(trip.attachments)?trip.attachments:[];const {error:upd}=await sb.from('trips').update({attachments:[...existing,...paths]}).eq('id',trip.id).eq('company_id',companyId);if(upd)throw upd;
+ status.textContent='تم رفع الفواتير وربطها بالرحلة.';document.getElementById('ownerInvoiceFiles').value='';if(typeof window.refreshOwnerTripInvoices==='function')window.refreshOwnerTripInvoices();
+ }catch(e){status.textContent='تعذر رفع الفواتير: '+(e.message||String(e));}
+ };
+ }catch(e){console.warn('Owner trip invoice upload UI',e);}})();
 </script></body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
