@@ -150,6 +150,7 @@ Deno.serve(async (req: Request) => {
     const km = numericField(form, "km", false);
     const revenue = numericField(form, "revenue", true);
     const otherCost = numericField(form, "other_cost", true);
+    const loadedMeters = numericField(form, "loaded_meters", true);
     const notesValue = form.get("notes");
     const notes = typeof notesValue === "string" ? notesValue.trim() : "";
     if (notes.length > 2000) throw new HttpError(400, "الملاحظات أطول من الحد المسموح");
@@ -249,6 +250,7 @@ Deno.serve(async (req: Request) => {
       km,
       revenue,
       other_cost: otherCost,
+      loaded_meters: loadedMeters,
       destination,
       notes: notes || null,
       attachments: uploadedPaths,
