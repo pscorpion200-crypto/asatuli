@@ -102,7 +102,52 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
   </style></head><body><h1>أسطولي Plus</h1><h2>تقرير المركبة: ${escHTML(v.plate||"—")}</h2>
   <p>نوع المركبة: ${escHTML(v.type||"—")} | الحالة: ${escHTML(v.status||"نشطة")}</p>
   <div class="summary">الإيرادات: ${money(revenue)} | الوقود: ${money(fuelCost)} (${liters} لتر) | الصيانة: ${money(maintCost)} | مصاريف الرحلات: ${money(other)} | الكيلومترات: ${km} | الصافي: ${money(revenue-fuelCost-maintCost-other)}</div>
-  <table><thead><tr><th>التاريخ</th><th>نوع السجل</th><th>التفاصيل</th><th>المصروف</th><th>الإيراد</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  <table><thead><tr><th>التاريخ</th><th>نوع السجل</th><th>التفاصيل</th><th>المصروف</th><th>الإيراد</th></tr></thead><tbody>${rows}</tbody></table><style id="trip-modal-mobile-fix">
+/* رحلة: أزرار ثابتة وواضحة على الهاتف */
+#modal .modalbox{display:flex;flex-direction:column;overflow:auto}
+#modal #recordForm{display:flex;flex-direction:column;gap:12px}
+#modal #formFields{padding-bottom:8px}
+#modal #recordForm .actions{position:sticky;bottom:-16px;background:#fff;padding:12px 0 calc(12px + env(safe-area-inset-bottom));margin-top:8px;z-index:5;border-top:1px solid #e4eaf2;display:flex;flex-wrap:wrap}
+#modal #recordForm .actions button{min-height:50px;font-size:16px}
+#modal #tripInvoiceField{display:block;border:1px solid #cbd7e5;border-radius:12px;padding:12px;background:#f8fbff}
+#modal #tripInvoiceField input{margin-top:8px}
+#modal #tripInvoiceNames{font-size:13px;color:#385475;margin-top:8px;overflow-wrap:anywhere}
+@media(max-width:700px){
+ #modal{align-items:flex-end!important;padding:8px!important}
+ #modal .modalbox{max-height:92vh!important;padding:14px!important;width:100%!important}
+ #modal #recordForm .actions{position:sticky;bottom:-14px}
+ #modal #recordForm .actions button{flex:1 1 45%;min-width:120px}
+}
+</style>
+<script id="trip-form-ui-enhancement">
+(function(){
+ const modal=document.getElementById('modal'),fieldsBox=document.getElementById('formFields'),form=document.getElementById('recordForm');
+ if(!modal||!fieldsBox||!form)return;
+ function enhance(){
+  if(document.getElementById('tripInvoiceField'))return;
+  const title=document.getElementById('modalTitle')?.textContent||'';
+  if(!title.includes('رحلة'))return;
+  // Add destination if this legacy trip form lacks it.
+  if(!fieldsBox.querySelector('[name="destination"]')){
+   const label=document.createElement('label');label.innerHTML='المنطقة / الوجهة<input name="destination" type="text" placeholder="مثلاً: عمّان، الزرقاء، العقبة أو اسم المنطقة" required>';
+   fieldsBox.appendChild(label);
+  }
+  const files=document.createElement('label');files.id='tripInvoiceField';files.innerHTML='🧾 فواتير الرحلة (صور أو PDF)<input id="tripInvoiceFiles" type="file" accept="image/*,.pdf" multiple><div id="tripInvoiceNames">اختر صور الفواتير أو ملفات PDF (حتى 5 ملفات، 8 ميغابايت لكل ملف).</div>';
+  fieldsBox.appendChild(files);
+  const input=files.querySelector('input');
+  input.addEventListener('change',()=>{
+   const chosen=[...input.files];
+   const names=document.getElementById('tripInvoiceNames');
+   if(chosen.length>5){input.value='';names.textContent='الحد الأقصى 5 ملفات.';return;}
+   if(chosen.some(f=>f.size>8*1024*1024)){input.value='';names.textContent='حجم الملف يجب أن لا يتجاوز 8 ميغابايت.';return;}
+   if(chosen.some(f=>!(f.type==='application/pdf'||f.type.startsWith('image/')))){input.value='';names.textContent='المسموح صور أو PDF فقط.';return;}
+   names.textContent=chosen.length?chosen.map(f=>f.name).join('، '):'لم يتم اختيار ملفات.';
+  });
+ }
+ const observer=new MutationObserver(enhance);observer.observe(modal,{attributes:true,attributeFilter:['class']});
+ const fieldObserver=new MutationObserver(()=>{if(modal.classList.contains('open'))enhance();});fieldObserver.observe(fieldsBox,{childList:true});
+})();
+</script></body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
   setTimeout(()=>{win.focus();win.print();},450);
