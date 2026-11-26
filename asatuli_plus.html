@@ -32,6 +32,89 @@ body{background:radial-gradient(ellipse at 85% 0%,#dceaff 0,transparent 35%),var
 @media(max-width:390px){.sidebar .nav button{min-width:42px;padding:9px 5px}.sidebar .nav .txt{font-size:8px}.top h1{font-size:18px}}
 </style>
 
+<style id="asatuli-owner-premium-ui">
+/* Owner/admin interface refresh — isolated from driver portal */
+body:not(.asatuli-driver-mode){background:radial-gradient(ellipse at 88% 0%,#dceaff 0,transparent 34%),linear-gradient(145deg,#f2f6fc,#edf2f8)!important;color:#172b45}
+body:not(.asatuli-driver-mode) .app{min-height:100vh;gap:0}
+body:not(.asatuli-driver-mode) .sidebar{position:sticky;top:0;height:100vh;min-height:100vh;width:258px;flex:0 0 258px;padding:25px 16px 18px;background:linear-gradient(165deg,#10243f 0%,#153a62 62%,#1d4b75 100%);box-shadow:10px 0 38px #10243f1b;border-radius:0 0 0 0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#54769a transparent}
+body:not(.asatuli-driver-mode) .brand{font-size:27px;padding:6px 12px 28px;color:#fff;letter-spacing:-.6px}
+body:not(.asatuli-driver-mode) .brand:before{content:"🚘";display:inline-grid;place-items:center;width:42px;height:42px;margin-left:10px;vertical-align:middle;border-radius:13px;background:#ffffff1a;font-size:22px}
+body:not(.asatuli-driver-mode) .brand small{font-size:10px;letter-spacing:2px;color:#a9c0dc;margin-top:6px}
+body:not(.asatuli-driver-mode) .sidebar .nav{display:flex;flex-direction:column;gap:5px}
+body:not(.asatuli-driver-mode) .sidebar .nav button{width:100%;min-height:46px;display:flex;align-items:center;gap:12px;padding:11px 13px;margin:0;border:1px solid transparent;border-radius:13px;background:transparent;color:#c4d3e5;font-size:14px;font-weight:650;text-align:right;transition:background .18s,border-color .18s,transform .18s}
+body:not(.asatuli-driver-mode) .sidebar .nav button span:first-child{width:24px;text-align:center;font-size:18px}
+body:not(.asatuli-driver-mode) .sidebar .nav button .txt{display:inline!important;font-size:13px}
+body:not(.asatuli-driver-mode) .sidebar .nav button:hover{background:#ffffff12;border-color:#ffffff18;transform:translateX(-2px);color:#fff}
+body:not(.asatuli-driver-mode) .sidebar .nav button.active{background:linear-gradient(110deg,#347dc4,#28639e);border-color:#77a9d544;color:#fff;box-shadow:0 8px 20px #07182b40}
+body:not(.asatuli-driver-mode) .sidebar button.nav.button,body:not(.asatuli-driver-mode) .sidebar-action{display:flex!important;align-items:center;justify-content:flex-start;width:100%;min-height:44px;margin:8px 0 0!important;padding:11px 13px!important;border-radius:13px!important;background:#ffffff0d!important;border:1px solid #ffffff1c!important;color:#e7f0fa!important;font-size:13px!important}
+body:not(.asatuli-driver-mode) .sidebar button.nav.button:hover,body:not(.asatuli-driver-mode) .sidebar-action:hover{background:#ffffff1b!important}
+body:not(.asatuli-driver-mode) .sidebar .logout-action{margin-top:auto!important;background:#8f3038!important;border-color:#d46b72!important;color:#fff!important}
+body:not(.asatuli-driver-mode) .main{min-width:0;padding:24px clamp(15px,2.4vw,34px) 35px}
+body:not(.asatuli-driver-mode) .top{position:sticky;top:10px;z-index:80;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;padding:17px 20px;border:1px solid #ffffffd9;border-radius:20px;background:#ffffffdf;backdrop-filter:blur(16px);box-shadow:0 10px 30px #1836530c}
+body:not(.asatuli-driver-mode) .top h1{margin:0;color:#17365a;font-size:clamp(21px,2vw,28px);font-weight:900;letter-spacing:-.5px}
+body:not(.asatuli-driver-mode) .top .sub{margin-top:6px;color:#78899e;font-size:12px}
+body:not(.asatuli-driver-mode) .top #add{min-height:44px;padding:11px 18px;border-radius:13px;font-size:14px;font-weight:850;white-space:nowrap}
+body:not(.asatuli-driver-mode) .cards{gap:15px}
+body:not(.asatuli-driver-mode) .card{position:relative;min-width:0;padding:19px;border:1px solid #e2eaf3;border-radius:19px;background:linear-gradient(155deg,#fff,#fbfdff);box-shadow:0 7px 24px #1836530b}
+body:not(.asatuli-driver-mode) #dash>.cards>.card{overflow:hidden;min-height:132px}
+body:not(.asatuli-driver-mode) #dash>.cards>.card:after{content:"";position:absolute;top:0;right:0;width:4px;height:100%;background:linear-gradient(#3988db,#78b8ea);border-radius:0 19px 19px 0}
+body:not(.asatuli-driver-mode) #dash>.cards>.card:nth-child(2):after{background:linear-gradient(#1d9a78,#77cfab)}
+body:not(.asatuli-driver-mode) #dash>.cards>.card:nth-child(3):after{background:linear-gradient(#e29a36,#f5c66c)}
+body:not(.asatuli-driver-mode) #dash>.cards>.card:nth-child(4):after{background:linear-gradient(#8a6ed1,#b9a7f0)}
+body:not(.asatuli-driver-mode) .card .label{color:#71839a;font-size:12px;font-weight:700}
+body:not(.asatuli-driver-mode) .card .icon{display:inline-grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#eaf3ff;font-size:21px}
+body:not(.asatuli-driver-mode) .stat{margin-top:12px;color:#173b63;font-size:clamp(24px,2.3vw,31px);font-weight:900;letter-spacing:-.7px;font-variant-numeric:tabular-nums}
+body:not(.asatuli-driver-mode) .section{margin-top:19px}
+body:not(.asatuli-driver-mode) .section h2,body:not(.asatuli-driver-mode) .card>h2{margin:0 0 14px;color:#1d3c5d;font-size:16px;font-weight:900}
+body:not(.asatuli-driver-mode) .twocol{gap:16px}
+body:not(.asatuli-driver-mode) .tablewrap{border:1px solid #e8eef5;border-radius:14px;background:#fff;overflow:auto}
+body:not(.asatuli-driver-mode) table{border-collapse:separate;border-spacing:0;min-width:100%}
+body:not(.asatuli-driver-mode) th{padding:13px 12px;background:#f4f8fc;color:#657991;font-size:12px;font-weight:800;border-bottom:1px solid #e4ebf3}
+body:not(.asatuli-driver-mode) td{padding:13px 12px;color:#344960;font-size:13px;border-bottom:1px solid #edf1f6}
+body:not(.asatuli-driver-mode) tbody tr:hover td{background:#f8fbff}
+body:not(.asatuli-driver-mode) .toolbar{gap:9px;align-items:center}
+body:not(.asatuli-driver-mode) .toolbar input,body:not(.asatuli-driver-mode) .toolbar select,body:not(.asatuli-driver-mode) .fields input,body:not(.asatuli-driver-mode) .fields select{min-height:42px;border:1px solid #d9e3ee;border-radius:12px;background:#fbfdff;color:#20374f;font-size:13px;outline:none;transition:border-color .15s,box-shadow .15s}
+body:not(.asatuli-driver-mode) input:focus,body:not(.asatuli-driver-mode) select:focus,body:not(.asatuli-driver-mode) textarea:focus{border-color:#438bd0!important;box-shadow:0 0 0 3px #438bd01c!important}
+body:not(.asatuli-driver-mode) .btn{min-height:40px;border-radius:12px;background:linear-gradient(125deg,#2f7dcc,#205ca4);box-shadow:0 5px 14px #2267ad24;font-size:13px;font-weight:800;transition:transform .15s,filter .15s}
+body:not(.asatuli-driver-mode) .btn:hover{filter:brightness(1.04);transform:translateY(-1px)}
+body:not(.asatuli-driver-mode) .btn.secondary{background:#edf4fc!important;border:1px solid #d9e7f6!important;color:#285f98!important;box-shadow:none!important}
+body:not(.asatuli-driver-mode) .pill{padding:5px 10px;border-radius:30px;font-weight:800}
+body:not(.asatuli-driver-mode) .alert{align-items:center;gap:12px;padding:13px 2px}
+body:not(.asatuli-driver-mode) .modal{z-index:1500;background:#0b1c3077;backdrop-filter:blur(5px)}
+body:not(.asatuli-driver-mode) .modalbox{width:min(620px,100%);padding:23px;border:1px solid #e3eaf3;border-radius:22px;background:#fff;box-shadow:0 25px 90px #06182c45}
+body:not(.asatuli-driver-mode) .modalbox h2{color:#1a3c60;font-size:20px;font-weight:900}
+body:not(.asatuli-driver-mode) .modalbox label{color:#566b82;font-weight:700}
+body:not(.asatuli-driver-mode) .footer{padding:15px 4px;color:#8998aa;font-size:11px}
+@media(max-width:950px){
+ body:not(.asatuli-driver-mode) .sidebar{width:220px;flex-basis:220px;padding:20px 12px}
+ body:not(.asatuli-driver-mode) .main{padding:18px 15px 30px}
+ body:not(.asatuli-driver-mode) .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+ body:not(.asatuli-driver-mode) .app{display:block!important}
+ body:not(.asatuli-driver-mode) .sidebar{position:fixed!important;top:auto!important;bottom:0!important;left:0!important;right:0!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;z-index:1000;display:flex!important;flex-direction:row!important;align-items:center;gap:5px;padding:7px 6px calc(7px + env(safe-area-inset-bottom))!important;border-radius:18px 18px 0 0;background:linear-gradient(100deg,#10243f,#194b78)!important;box-shadow:0 -8px 28px #10243f2b;overflow-x:auto}
+ body:not(.asatuli-driver-mode) .sidebar .brand,body:not(.asatuli-driver-mode) .sidebar>button.nav.button,body:not(.asatuli-driver-mode) .sidebar-action{display:none!important}
+ body:not(.asatuli-driver-mode) .sidebar .nav{display:flex!important;flex:1;min-width:0;flex-direction:row!important;gap:3px;overflow-x:auto;scrollbar-width:none}
+ body:not(.asatuli-driver-mode) .sidebar .nav::-webkit-scrollbar{display:none}
+ body:not(.asatuli-driver-mode) .sidebar .nav button{flex:0 0 auto;min-width:48px;width:auto;min-height:48px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:6px 7px;border-radius:11px;font-size:17px}
+ body:not(.asatuli-driver-mode) .sidebar .nav button .txt{display:block!important;font-size:9px!important;line-height:1.1;white-space:nowrap}
+ body:not(.asatuli-driver-mode) .sidebar .nav button span:first-child{width:auto;font-size:17px}
+ body:not(.asatuli-driver-mode) .main{padding:12px 11px calc(100px + env(safe-area-inset-bottom))!important}
+ body:not(.asatuli-driver-mode) .top{position:relative;top:auto;padding:14px;border-radius:17px;flex-wrap:wrap;gap:11px;margin-bottom:15px}
+ body:not(.asatuli-driver-mode) .top h1{font-size:20px}
+ body:not(.asatuli-driver-mode) .top #add{min-height:42px;padding:9px 13px}
+ body:not(.asatuli-driver-mode) .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ body:not(.asatuli-driver-mode) .card{padding:13px;border-radius:16px}
+ body:not(.asatuli-driver-mode) #dash>.cards>.card{min-height:120px}
+ body:not(.asatuli-driver-mode) .stat{font-size:23px}
+ body:not(.asatuli-driver-mode) .twocol{grid-template-columns:1fr;gap:12px}
+ body:not(.asatuli-driver-mode) .section{margin-top:13px}
+ body:not(.asatuli-driver-mode) .toolbar input,body:not(.asatuli-driver-mode) .toolbar select{max-width:100%;min-width:0}
+ body:not(.asatuli-driver-mode) .modal{align-items:flex-end;padding:8px}
+ body:not(.asatuli-driver-mode) .modalbox{max-height:88vh;padding:18px 15px;border-radius:23px 23px 15px 15px}
+ body:not(.asatuli-driver-mode) .fields{grid-template-columns:1fr}
+}
+</style>
 </head><body class="auth-gate"><div class="app"><aside class="sidebar"><div class="brand">أسطولي<small>FLEET MANAGEMENT</small></div><nav class="nav"><button class="active" data-view="dash"><span>▦</span><span class="txt">لوحة التحكم</span></button><button data-view="vehicles"><span>🚘</span><span class="txt">المركبات</span></button><button data-view="drivers"><span>👤</span><span class="txt">السائقون</span></button><button data-view="fuel"><span>⛽</span><span class="txt">الوقود</span></button><button data-view="maintenance"><span>🔧</span><span class="txt">الصيانة</span></button><button data-view="trips"><span>🧭</span><span class="txt">الرحلات</span></button><button data-view="reports"><span>📊</span><span class="txt">التقارير</span></button></nav><button class="nav button" onclick="openConnect()" style="margin-top:20px;color:#fff">⚙️ <span class="txt">ربط الحساب</span></button><button class="nav button" onclick="switchCompany()" style="margin-top:8px;color:#fff"><span class="txt">تبديل الشركة</span></button><button class="nav button" onclick="openMembers()" style="margin-top:8px;color:#fff">👥 <span class="txt">إدارة الأعضاء</span></button><button class="sidebar-action logout-action" onclick="logoutCloud()">🚪 <span class="txt">تسجيل الخروج</span></button></aside><main class="main"><div class="top"><div><h1 id="heading">لوحة التحكم</h1><div class="sub">نظرة عامة على عمليات أسطولك</div></div><button class="btn" id="add">＋ إضافة سجل</button></div>
 <div class="view active" id="dash"><div class="cards"><div class="card"><div class="icon">🚘</div><div class="label">المركبات</div><div class="stat" id="vCount">0</div></div><div class="card"><div class="icon">👤</div><div class="label">السائقون</div><div class="stat" id="dCount">0</div></div><div class="card"><div class="icon">⛽</div><div class="label">مصروف الوقود</div><div class="stat" id="fuelTotal">0.000</div><div class="sub">دينار</div></div><div class="card"><div class="icon">🔧</div><div class="label">الصيانة</div><div class="stat" id="maintTotal">0.000</div><div class="sub">دينار</div></div></div><div class="card section" id="smartFleetInsights"><h2>مؤشرات أداء ذكية</h2><div class="sub">سيظهر تحليل الأداء بعد تسجيل البيانات.</div></div><div class="card section" id="dataQuality"><h2>🔎 جودة واكتمال البيانات</h2><div class="sub">تحقق من السجلات الناقصة لتقارير أدق.</div></div><div class="twocol section"><div class="card"><h2>آخر الرحلات</h2><div class="tablewrap"><table><thead><tr><th>التاريخ</th><th>المركبة</th><th>السائق</th><th>الإيراد</th></tr></thead><tbody id="latest"></tbody></table></div></div><div class="card"><h2>تنبيهات <button class="btn secondary" onclick="exportAlertsCSV()" style="float:left;padding:6px 10px;font-size:12px">تصدير التنبيهات</button></h2><div id="alerts"><div class="alert"><span>أضف مركبات لمتابعة الترخيص والصيانة.</span><span class="pill warn">تنبيه</span></div></div></div></div><div class="card section"><h2>إجمالي الرحلات المسجلة</h2><div class="stat" id="tripCount">0</div><div class="sub">سجل رحلة</div></div></div>
 <div class="view" id="vehicles"><div class="card"><div class="toolbar"><input id="searchVehicles" placeholder="بحث عن مركبة"/><button class="btn secondary" onclick="openModal('vehicles')">＋ مركبة</button></div><div class="tablewrap"><table><thead><tr><th>اللوحة</th><th>النوع</th><th>التأمين</th><th>الترخيص</th><th>الحالة</th><th></th></tr></thead><tbody id="vehicleRows"></tbody></table></div></div></div>
