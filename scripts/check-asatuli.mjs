@@ -18,6 +18,14 @@ const uploadFunction = readFileSync(
   resolve(root, "supabase/functions/driver-save-trip-with-invoices/index.ts"),
   "utf8",
 );
+const driverAccountFunction = readFileSync(
+  resolve(root, "supabase/functions/owner-create-driver/index.ts"),
+  "utf8",
+);
+const driverRoleMigration = readFileSync(
+  resolve(root, "supabase/migrations/202611270001_driver_role.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert.ok(blocks.length > 0, "No script blocks were found");
@@ -98,6 +106,43 @@ assert.equal(
   detectInvoiceType(new Uint8Array([0x00, 0x01, 0x02, 0x03])),
   null,
   "Unknown file signatures must be rejected",
+);
+
+assert.ok(
+  html.includes("roleq.error||roleq.data?.role!=='driver'"),
+  "Driver portal must only render for a dedicated driver role",
+);
+assert.ok(
+  html.includes("r.role==='driver'?'':'<button"),
+  "Driver accounts must not be offered module-permission controls",
+);
+assert.ok(
+  driverAccountFunction.includes('role: "driver"'),
+  "New driver accounts must use the dedicated driver role",
+);
+assert.ok(
+  uploadFunction.includes('(membership as unknown as { role: string }).role !== "driver"'),
+  "Server-side trip uploads must require the dedicated driver role",
+);
+assert.ok(
+  driverRoleMigration.includes("'driver'::text"),
+  "Database membership constraint must allow the dedicated driver role",
+);
+assert.ok(
+  driverRoleMigration.includes("set role = 'driver'"),
+  "Existing linked driver memberships must be converted",
+);
+assert.ok(
+  driverRoleMigration.includes("delete from public.member_permissions"),
+  "Linked driver accounts must have module grants removed",
+);
+assert.ok(
+  driverRoleMigration.includes("m.role = 'driver'"),
+  "Trip invoice storage uploads must require the dedicated driver role",
+);
+assert.ok(
+  driverRoleMigration.includes("d.id = trips.driver_id"),
+  "Drivers must only read their own trip rows",
 );
 
 assert.ok(policy.includes("CREATE POLICY trip_invoice_upload_assigned_driver"), "Assigned-driver upload policy is missing");
