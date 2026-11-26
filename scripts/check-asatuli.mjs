@@ -17,7 +17,7 @@ for (let index = 0; index < blocks.length; index += 1) {
   try {
     new Function(blocks[index][1]);
   } catch (error) {
-    throw new Error(\`JavaScript block \${index + 1} failed syntax validation: \${error.message}\`);
+    throw new Error("JavaScript block " + (index + 1) + " failed syntax validation: " + error.message);
   }
 }
 
@@ -50,4 +50,4 @@ assert.ok(policy.includes("employee_assigned_vehicle"), "Invoice uploads must re
 assert.ok(policy.includes("FROM public.drivers d"), "Invoice uploads must require a linked driver row");
 assert.ok(policy.includes("(storage.foldername(storage.objects.name))[2] = (SELECT auth.uid())::text"), "Invoice uploads must be scoped to the uploader folder");
 
-console.log(\`PASS: \${blocks.length} JavaScript blocks compile; invoice ownership, driver upload, cleanup and storage policy checks passed.\`);
+console.log("PASS: " + blocks.length + " JavaScript blocks compile; invoice ownership, driver upload, cleanup and storage policy checks passed.");
