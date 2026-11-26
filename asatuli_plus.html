@@ -259,6 +259,17 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
  setInterval(()=>{setupOilForm();renderOilAlerts();},2500);
 })();
 </script>
+<script id="oil-vehicle-card-remaining">
+(function(){try{
+const sec=document.getElementById('vehicles');if(!sec||document.getElementById('oilVehicleRemainingPanel'))return;
+const panel=document.createElement('section');panel.className='card section';panel.id='oilVehicleRemainingPanel';panel.innerHTML='<h2>🛢️ حالة زيت المحرك لكل مركبة</h2><div class="sub">يُحسب المتبقي اعتماداً على آخر قراءة عداد مسجلة في الوقود.</div><div id="oilVehicleRemainingRows"></div>';sec.appendChild(panel);
+const isOil=m=>String(m.descr||'').includes('تغيير زيت المحرك');
+function draw(){if(!Array.isArray(store?.vehicles))return;const out=[];for(const v of store.vehicles){const rec=(store.maintenance||[]).filter(m=>m.vehicle_id===v.id&&isOil(m)).sort((a,b)=>String(b.day||'').localeCompare(String(a.day||'')))[0];if(!rec){out.push({p:v.plate||v.type||'مركبة',s:'لم يتم تسجيل تغيير زيت',tag:'غير مسجل'});continue;}const notes=String(rec.notes||''),a=notes.match(/عداد وقت التغيير:\s*(\d+)/),b=notes.match(/العداد القادم:\s*(\d+)/),start=a?Number(a[1]):null,next=b?Number(b[1]):(start!=null?start+5000:null);const readings=(store.fuel||[]).filter(x=>x.vehicle_id===v.id&&x.odo!=null&&Number(x.odo)>0).map(x=>Number(x.odo));const current=readings.length?Math.max(...readings):null;if(current==null||next==null){out.push({p:v.plate||v.type||'مركبة',s:'موعد الزيت عند '+(next??'—')+' كم — سجل قراءة العداد',tag:'العداد ناقص'});continue;}const rem=next-current;out.push({p:v.plate||v.type||'مركبة',s:'العداد '+current+' — موعد الزيت '+next+' كم — '+(rem<=0?'متأخر '+Math.abs(rem)+' كم':'متبقي '+rem+' كم'),tag:rem<=0?'مطلوب':rem<=1000?'قريب':'جيد',warn:rem<=0,soon:rem>0&&rem<=1000});}
+const box=document.getElementById('oilVehicleRemainingRows');if(box)box.innerHTML=out.map(x=>'<div class="alert"><span><b>'+escHTML(x.p)+'</b> — '+escHTML(x.s)+'</span><span class="pill '+(x.warn?'warn':x.soon?'warn':'blue')+'">'+x.tag+'</span></div>').join('')||'<div class="sub">لا توجد مركبات.</div>';
+}try{draw()}catch(e){console.warn(e)}}
+draw();setInterval(draw,4000);
+}catch(e){console.warn('Oil vehicle overview',e)}})();
+</script>
 </body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
