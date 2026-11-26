@@ -52,4 +52,45 @@ with check (
   )
 );
 
+-- Drivers may read only their own trip rows, even if a vehicle is shared.
+-- Owners and managers retain their existing company-wide/module-based visibility.
+drop policy if exists module_read on public.trips;
+
+create policy module_read
+on public.trips
+for select
+to authenticated
+using (
+  public.is_company_owner(company_id)
+  or (
+    public.employee_assigned_vehicle(company_id, vehicle_id)
+    and (
+      not exists (
+        select 1
+        from public.members m
+        where m.company_id = trips.company_id
+          and m.user_id = auth.uid()
+          and m.role = 'driver'
+      )
+      or exists (
+        select 1
+        from public.drivers d
+        where d.company_id = trips.company_id
+          and d.user_id = auth.uid()
+          and d.id = trips.driver_id
+      )
+    )
+  )
+  or (
+    exists (
+      select 1
+      from public.members m
+      where m.company_id = trips.company_id
+        and m.user_id = auth.uid()
+        and m.role = 'manager'
+    )
+    and public.has_module_permission(company_id, 'trips', 'view')
+  )
+);
+
 commit;
