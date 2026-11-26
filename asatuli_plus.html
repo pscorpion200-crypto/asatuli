@@ -140,7 +140,7 @@ if(!driver_id)throw Error('لم يتم ربط حساب السائق بسجل ا�
 const tripId=crypto.randomUUID();
 status.textContent='جار رفع الفواتير وحفظ الرحلة...';
 for(let i=0;i<files.length;i++){
-const f=files[i],ext=(f.name.split('.').pop()||'file').replace(/[^a-zA-Z0-9]/g,'').slice(0,8),path=companyId+'/'+uid+'/'+tripId+'/'+i+'-'+crypto.randomUUID()+'.'+ext;
+const f=files[i],ext=(f.name.split('.').pop()||'file').replace(/[^a-zA-Z0-9]/g,'').slice(0,8),path=companyId+'/'+uid+'/'+vehicle.id+'/'+tripId+'/'+i+'-'+crypto.randomUUID()+'.'+ext;
 paths.push(path);
 const {error:up}=await sb.storage.from('trip-invoices').upload(path,f,{contentType:f.type,upsert:false});
 if(up)throw up;
