@@ -67,11 +67,11 @@ BEGIN
 
   -- The current members.role constraint allows owner, manager, viewer.
   -- New driver accounts use viewer; preserve an existing manager role.
-  INSERT INTO public.members(company_id, user_id, role)
+  INSERT INTO public.members AS existing_member(company_id, user_id, role)
   VALUES (v_company, p_user_id, 'viewer')
   ON CONFLICT (company_id, user_id)
   DO UPDATE SET role = CASE
-    WHEN public.members.role = 'manager' THEN 'manager'
+    WHEN existing_member.role = 'manager' THEN 'manager'
     ELSE 'viewer'
   END;
 
