@@ -155,8 +155,10 @@ document.getElementById('dpTripInvoices').value='';
 }catch(e){
 let message=e.message||String(e);
 if(paths.length){
+try{
 const {error:cleanupError}=await sb.storage.from('trip-invoices').remove(paths);
 if(cleanupError){console.warn('Trip invoice cleanup failed',cleanupError);message+=' — تعذر حذف بعض الملفات المؤقتة من التخزين';}
+}catch(cleanupException){console.warn('Trip invoice cleanup threw',cleanupException);message+=' — تعذر حذف بعض الملفات المؤقتة من التخزين';}
 }
 status.textContent='تعذر حفظ الرحلة: '+message;
 }
