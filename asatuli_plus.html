@@ -259,7 +259,7 @@ window.createDriverAccount=async function(){const status=document.getElementById
 
 
 <script id="driver-portal-v1">
-(async function(){let driverMode=false;try{if(!window.sb||!window.cloudMode||!window.companyId)return;const auth=await sb.auth.getUser();const uid=auth.data?.user?.id;if(!uid)return;const roleq=await sb.from('members').select('role').eq('company_id',companyId).eq('user_id',uid).maybeSingle();if(roleq.error||roleq.data?.role!=='driver')return;
+(async function(){let driverMode=false;try{if(!sb||!cloudMode||!companyId)return;const auth=await sb.auth.getUser();const uid=auth.data?.user?.id;if(!uid)return;const roleq=await sb.from('members').select('role').eq('company_id',companyId).eq('user_id',uid).maybeSingle();if(roleq.error||roleq.data?.role!=='driver')return;
 // Isolate driver accounts from the owner application.
 driverMode=true;document.body.classList.add('asatuli-driver-mode');
 for(const el of Array.from(document.body.children)){if(el.tagName!=='SCRIPT'&&el.tagName!=='STYLE')el.style.setProperty('display','none','important');}
