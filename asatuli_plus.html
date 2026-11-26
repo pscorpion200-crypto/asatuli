@@ -602,5 +602,119 @@ window.createDriverAccount=async function(){const status=document.getElementById
  .tablewrap{max-width:100%!important;overflow-x:auto!important}
 }
 </style>
+
+<script id="fleet-expiry-report-v2">
+(function(){
+  try {
+    if (document.getElementById('fleetExpiryPanel')) return;
+    const dash = document.getElementById('dash');
+    if (!dash) return;
+    const panel = document.createElement('section');
+    panel.className = 'card section';
+    panel.id = 'fleetExpiryPanel';
+    panel.innerHTML =
+      '<h2>🗂️ تقرير الوثائق ومواعيد الصيانة</h2>' +
+      '<div class="sub">متابعة التأمين والترخيص ورخص السائقين والهويات والصيانة القادمة، مع إظهار المتأخر وما يستحق خلال 90 يوماً.</div>' +
+      '<div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0">' +
+        '<label>فترة العرض <select id="fleetExpiryWindow"><option value="30">30 يوماً</option><option value="60">60 يوماً</option><option value="90" selected>90 يوماً</option></select></label>' +
+        '<button type="button" class="btn secondary" id="fleetExpiryRefresh">تحديث التقرير</button>' +
+        '<button type="button" class="btn secondary" id="fleetExpiryExport">تصدير CSV</button>' +
+      '</div>' +
+      '<div class="cards" id="fleetExpirySummary"></div>' +
+      '<div id="fleetExpiryRows" style="margin-top:12px"></div>' +
+      '<div class="sub" id="fleetExpiryStatus" aria-live="polite"></div>';
+    dash.appendChild(panel);
+
+    const dayValue = value => {
+      const match = String(value || '').match(/^\d{4}-\d{2}-\d{2}/);
+      if (!match) return null;
+      const date = new Date(match[0] + 'T00:00:00');
+      return Number.isNaN(date.getTime()) ? null : { date: match[0], time: date.getTime() };
+    };
+
+    function collect() {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const rows = [];
+      const add = (subject, type, rawDate) => {
+        const parsed = dayValue(rawDate);
+        if (!parsed) return;
+        const days = Math.round((parsed.time - today.getTime()) / 86400000);
+        if (days <= 90) rows.push({ subject: String(subject || '—'), type, date: parsed.date, days });
+      };
+      (store.vehicles || []).forEach(v => {
+        add(v.plate, 'تأمين المركبة', v.insurance);
+        add(v.plate, 'ترخيص المركبة', v.license);
+        add(v.plate, 'الصيانة القادمة', v.next_maint);
+      });
+      (store.maintenance || []).forEach(m => add(vname(m.vehicle_id), 'موعد صيانة مسجل', m.next_date));
+      (store.drivers || []).forEach(d => {
+        add(d.name, 'رخصة القيادة', d.license_exp);
+        add(d.name, 'الهوية', d.id_exp);
+      });
+      const unique = new Map();
+      rows.forEach(item => {
+        const key = [item.subject, item.type, item.date].join('|');
+        if (!unique.has(key)) unique.set(key, item);
+      });
+      return [...unique.values()].sort((a,b) => a.days - b.days || a.subject.localeCompare(b.subject, 'ar'));
+    }
+
+    function visibleRows() {
+      const limit = Number(document.getElementById('fleetExpiryWindow').value || 90);
+      return collect().filter(item => item.days <= limit);
+    }
+
+    function draw() {
+      const rows = visibleRows();
+      const overdue = rows.filter(x => x.days < 0).length;
+      const soon = rows.filter(x => x.days >= 0 && x.days <= 30).length;
+      const later = rows.filter(x => x.days > 30).length;
+      document.getElementById('fleetExpirySummary').innerHTML =
+        '<div class="card"><div class="label">متأخرة</div><div class="stat">' + overdue + '</div></div>' +
+        '<div class="card"><div class="label">خلال 30 يوماً</div><div class="stat">' + soon + '</div></div>' +
+        '<div class="card"><div class="label">بعد 30 يوماً</div><div class="stat">' + later + '</div></div>';
+      const box = document.getElementById('fleetExpiryRows');
+      if (!rows.length) {
+        box.innerHTML = '<div class="sub">لا توجد وثائق أو مواعيد صيانة متأخرة أو مستحقة ضمن الفترة المحددة.</div>';
+      } else {
+        box.innerHTML = '<div class="tablewrap"><table><thead><tr><th>المركبة / السائق</th><th>نوع الاستحقاق</th><th>التاريخ</th><th>الحالة</th></tr></thead><tbody>' +
+          rows.map(x => {
+            const status = x.days < 0 ? 'متأخر ' + Math.abs(x.days) + ' يوم' : x.days === 0 ? 'اليوم' : 'بعد ' + x.days + ' يوم';
+            const color = x.days < 0 ? '#b42318' : x.days <= 30 ? '#b45309' : 'inherit';
+            return '<tr><td>' + escHTML(x.subject) + '</td><td>' + escHTML(x.type) + '</td><td>' + escHTML(x.date) + '</td><td><strong style="color:' + color + '">' + status + '</strong></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      document.getElementById('fleetExpiryStatus').textContent = 'عدد الاستحقاقات المعروضة: ' + rows.length;
+    }
+
+    document.getElementById('fleetExpiryWindow').addEventListener('change', draw);
+    document.getElementById('fleetExpiryRefresh').addEventListener('click', draw);
+    document.getElementById('fleetExpiryExport').addEventListener('click', () => {
+      const rows = visibleRows();
+      const data = [['المركبة / السائق','نوع الاستحقاق','التاريخ','الأيام المتبقية'], ...rows.map(x => [x.subject,x.type,x.date,x.days])];
+      const csv = '\ufeff' + data.map(row => row.map(value => '"' + String(value ?? '').replace(/"/g,'""') + '"').join(',')).join('\r\n');
+      const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8;'}));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'asatuli-expiry-report.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      document.getElementById('fleetExpiryStatus').textContent = 'تم تجهيز ملف CSV بعدد ' + rows.length + ' استحقاق.';
+    });
+
+    const oldRender = render;
+    render = function() {
+      const result = oldRender.apply(this, arguments);
+      draw();
+      return result;
+    };
+    draw();
+  } catch (error) {
+    console.warn('Fleet expiry report module error', error);
+  }
+})();
+</script>
+
 </body>
 </html>
