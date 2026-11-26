@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
     const { error: memberError } = await admin.from("members").insert({
       company_id,
       user_id: createdUserId,
-      role: "viewer",
+      role: "driver",
     });
     if (memberError) throw memberError;
 
