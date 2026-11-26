@@ -126,41 +126,36 @@ const main=document.querySelector('main')||document.getElementById('app')||docum
 for(const el of Array.from(document.body.children)){if(el!==portal&&el.tagName!=='SCRIPT'&&el.tagName!=='STYLE')el.style.display='none';}document.body.appendChild(portal);
 const status=document.getElementById('dpStatus');document.getElementById('dpFuelSave').onclick=async()=>{try{const liters=Number(document.getElementById('dpFuelLiters').value),price=Number(document.getElementById('dpFuelPrice').value);if(!document.getElementById('dpFuelDay').value||!liters||!price)throw Error('أدخل التاريخ واللترات والمبلغ');const {error}=await sb.from('fuel').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpFuelDay').value,liters,price,odometer:Number(document.getElementById('dpFuelOdo').value)||null,notes:document.getElementById('dpFuelNotes').value||null});if(error)throw error;status.textContent='تم حفظ التعبئة.';document.getElementById('dpFuelLiters').value='';document.getElementById('dpFuelPrice').value='';}catch(e){status.textContent='تعذر الحفظ: '+(e.message||e)}};
 document.getElementById('dpMaintSave').onclick=async()=>{try{const descr=document.getElementById('dpMaintDescr').value.trim(),cost=Number(document.getElementById('dpMaintCost').value);if(!descr||!document.getElementById('dpMaintDay').value||!Number.isFinite(cost))throw Error('أدخل التاريخ والوصف والكلفة');const {error}=await sb.from('maintenance').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpMaintDay').value,descr,cost,next_date:document.getElementById('dpMaintNext').value||null,attachments:[],notes:document.getElementById('dpMaintNotes').value||null});if(error)throw error;status.textContent='تم حفظ الصيانة.';document.getElementById('dpMaintDescr').value='';document.getElementById('dpMaintCost').value='';}catch(e){status.textContent='تعذر الحفظ: '+(e.message||e)}};document.getElementById('dpTripSave').onclick=async()=>{
-const paths=[];
 try{
 const day=document.getElementById('dpTripDay').value,destination=document.getElementById('dpTripDest').value.trim(),km=Number(document.getElementById('dpTripKm').value),revenue=Number(document.getElementById('dpTripRevenue').value),other_cost=Number(document.getElementById('dpTripOther').value||0),notes=document.getElementById('dpTripNotes').value.trim(),files=[...(document.getElementById('dpTripInvoices').files||[])];
 if(!day||!destination||!Number.isFinite(km)||km<=0||!Number.isFinite(revenue)||revenue<0||!Number.isFinite(other_cost)||other_cost<0)throw Error('أدخل التاريخ والمنطقة والمسافة والإيراد والمصاريف بشكل صحيح');
-if(files.some(f=>f.size>8*1024*1024))throw Error('حجم الفاتورة الواحدة يجب أن لا يتجاوز 8 ميغابايت');
+if(files.length>5)throw Error('الحد الأقصى خمسة مرفقات للرحلة الواحدة');
+if(files.some(f=>f.size<=0||f.size>8*1024*1024))throw Error('حجم الفاتورة الواحدة يجب أن لا يتجاوز 8 ميغابايت');
 if(files.some(f=>!(f.type==='application/pdf'||f.type.startsWith('image/'))))throw Error('المرفقات المسموحة صور أو ملفات PDF فقط');
-status.textContent='جار التحقق من حساب السائق...';
-const {data:driverRows,error:driverErr}=await sb.from('drivers').select('id').eq('company_id',companyId).eq('user_id',uid).limit(1);
-if(driverErr)throw driverErr;
-const driver_id=driverRows?.[0]?.id;
-if(!driver_id)throw Error('لم يتم ربط حساب السائق بسجل السائق في قاعدة البيانات بعد');
-const tripId=crypto.randomUUID();
-status.textContent='جار رفع الفواتير وحفظ الرحلة...';
-for(let i=0;i<files.length;i++){
-const f=files[i],ext=(f.name.split('.').pop()||'file').replace(/[^a-zA-Z0-9]/g,'').slice(0,8),path=companyId+'/'+uid+'/'+vehicle.id+'/'+tripId+'/'+i+'-'+crypto.randomUUID()+'.'+ext;
-paths.push(path);
-const {error:up}=await sb.storage.from('trip-invoices').upload(path,f,{contentType:f.type,upsert:false});
-if(up)throw up;
-}
-const {error:tripError}=await sb.from('trips').insert({id:tripId,company_id:companyId,vehicle_id:vehicle.id,driver_id,day,km,revenue,other_cost,destination,notes:notes||null,attachments:paths});
-if(tripError)throw tripError;
-paths.length=0;
-status.textContent='تم حفظ الرحلة والفواتير.';
+const {data:{session}}=await sb.auth.getSession();
+if(!session)throw Error('جلسة السائق غير موجودة؛ سجّل الدخول مرة أخرى');
+const form=new FormData();
+form.append('company_id',companyId);
+form.append('vehicle_id',vehicle.id);
+form.append('day',day);
+form.append('destination',destination);
+form.append('km',String(km));
+form.append('revenue',String(revenue));
+form.append('other_cost',String(other_cost));
+form.append('notes',notes);
+for(const file of files)form.append('files',file,file.name);
+status.textContent='جار التحقق من السائق والمركبة ورفع الفواتير...';
+const url=(document.getElementById('sbUrl').value.trim()||'https://aicvzcxrakhzlcfosvsx.supabase.co').replace(/\\/$/,'');
+const key=document.getElementById('sbKey').value.trim();
+const response=await fetch(url+'/functions/v1/driver-save-trip-with-invoices',{method:'POST',headers:{'Authorization':'Bearer '+session.access_token,'apikey':key},body:form});
+const result=await response.json().catch(()=>({}));
+if(!response.ok||result.error)throw new Error(result.error||'تعذر حفظ الرحلة');
+status.textContent='تم حفظ الرحلة والفواتير بنجاح.';
 ['dpTripDest','dpTripKm','dpTripRevenue','dpTripNotes'].forEach(id=>document.getElementById(id).value='');
 document.getElementById('dpTripOther').value='0';
 document.getElementById('dpTripInvoices').value='';
 }catch(e){
-let message=e.message||String(e);
-if(paths.length){
-try{
-const {error:cleanupError}=await sb.storage.from('trip-invoices').remove(paths);
-if(cleanupError){console.warn('Trip invoice cleanup failed',cleanupError);message+=' — تعذر حذف بعض الملفات المؤقتة من التخزين';}
-}catch(cleanupException){console.warn('Trip invoice cleanup threw',cleanupException);message+=' — تعذر حذف بعض الملفات المؤقتة من التخزين';}
-}
-status.textContent='تعذر حفظ الرحلة: '+message;
+status.textContent='تعذر حفظ الرحلة: '+(e.message||String(e));
 }
 };document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
 }catch(e){console.warn('Driver portal bootstrap',e)}})();
