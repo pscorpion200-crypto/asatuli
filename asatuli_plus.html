@@ -188,7 +188,7 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
 (async function(){try{
  if(!window.sb||!window.cloudMode||!window.companyId)return;
  const {data:owner,error:oe}=await sb.rpc('is_company_owner',{p_company_id:companyId});if(oe||owner!==true)return;
- const host=document.getElementById('ownerTripInvoiceReview');if(!host)return;
+ let host=document.getElementById('ownerTripInvoiceReview');for(let wait=0;!host&&wait<30;wait++){await new Promise(r=>setTimeout(r,300));host=document.getElementById('ownerTripInvoiceReview');}if(!host)return;
  const panel=document.createElement('div');panel.className='card';panel.style.margin='12px 0';panel.innerHTML='<h3>إرفاق فاتورة برحلة مسجلة</h3><label>اختر الرحلة<select id="ownerInvoiceTrip" style="display:block;width:100%;padding:12px;margin:8px 0;border-radius:10px"></select></label><label>الفواتير (صور أو PDF)<input id="ownerInvoiceFiles" type="file" accept="image/*,.pdf" multiple style="display:block;width:100%;padding:12px;margin:8px 0"></label><button class="btn" id="ownerInvoiceUpload">رفع الفواتير وربطها بالرحلة</button><div id="ownerInvoiceUploadStatus" class="sub" style="margin-top:8px"></div>';
  host.insertBefore(panel,host.children[1]);
  const sel=document.getElementById('ownerInvoiceTrip'),status=document.getElementById('ownerInvoiceUploadStatus');
