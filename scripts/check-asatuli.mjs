@@ -10,19 +10,19 @@ const policy = readFileSync(
   "utf8",
 );
 
-const blocks = [...html.matchAll(/<script\\b[^>]*>([\\s\\S]*?)<\\/script>/gi)];
+const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert.ok(blocks.length > 0, "No script blocks were found");
 
 for (let index = 0; index < blocks.length; index += 1) {
   try {
     new Function(blocks[index][1]);
   } catch (error) {
-    throw new Error(`JavaScript block ${index + 1} failed syntax validation: ${error.message}`);
+    throw new Error(\`JavaScript block \${index + 1} failed syntax validation: \${error.message}\`);
   }
 }
 
 const invoiceReview = html.match(
-  /<script id="owner-trip-invoice-review">([\\s\\S]*?)<\\/script>/i,
+  /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
 )?.[1] ?? "";
 
 assert.ok(invoiceReview, "Owner invoice review script is missing");
@@ -50,4 +50,4 @@ assert.ok(policy.includes("employee_assigned_vehicle"), "Invoice uploads must re
 assert.ok(policy.includes("FROM public.drivers d"), "Invoice uploads must require a linked driver row");
 assert.ok(policy.includes("(storage.foldername(storage.objects.name))[2] = (SELECT auth.uid())::text"), "Invoice uploads must be scoped to the uploader folder");
 
-console.log(`PASS: ${blocks.length} JavaScript blocks compile; invoice ownership, driver upload, cleanup and storage policy checks passed.`);
+console.log(\`PASS: \${blocks.length} JavaScript blocks compile; invoice ownership, driver upload, cleanup and storage policy checks passed.\`);
