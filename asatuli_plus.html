@@ -147,6 +147,43 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
  const observer=new MutationObserver(enhance);observer.observe(modal,{attributes:true,attributeFilter:['class']});
  const fieldObserver=new MutationObserver(()=>{if(modal.classList.contains('open'))enhance();});fieldObserver.observe(fieldsBox,{childList:true});
 })();
+</script><style id="trip-modal-final-fix">
+#modal{z-index:2000!important;align-items:center!important;justify-content:center!important;padding:10px!important}
+#modal .modalbox{width:min(720px,96vw)!important;max-height:calc(100dvh - 110px)!important;overflow-y:auto!important;padding:16px!important;margin:auto!important}
+#modal #recordForm{display:flex!important;flex-direction:column!important}
+#modal #formFields{display:grid!important;grid-template-columns:1fr!important;gap:12px!important;padding-bottom:12px!important}
+#modal #recordForm .actions{position:sticky!important;bottom:0!important;z-index:20!important;background:white!important;padding:12px 0 calc(12px + env(safe-area-inset-bottom))!important;border-top:1px solid #dbe4ef!important;display:flex!important;gap:10px!important}
+#modal #recordForm .actions button{flex:1!important;min-height:52px!important}
+#modal .trip-extra-field{display:block!important;border:1px solid #cbd7e5!important;border-radius:12px!important;padding:12px!important;background:#f8fbff!important}
+#modal #tripInvoiceNames{font-size:13px!important;margin-top:8px!important;overflow-wrap:anywhere!important}
+@media(max-width:700px){#modal{align-items:flex-end!important;padding:8px 8px 100px!important}#modal .modalbox{max-height:calc(100dvh - 120px)!important;width:100%!important;padding:14px!important}#modal #recordForm .actions{bottom:0!important}}
+</style>
+<script id="trip-modal-final-script">
+(function(){
+ if(window.__asatuliTripEnhancement)return;window.__asatuliTripEnhancement=true;
+ const original=window.openModal;
+ window.openModal=function(type,record){
+  original(type,record);
+  if(type!=='trips')return;
+  const fields=document.getElementById('formFields');
+  if(!fields)return;
+  if(!fields.querySelector('[name="destination"]')){
+   const dest=document.createElement('label');dest.className='trip-extra-field';dest.innerHTML='المنطقة / الوجهة<input name="destination" type="text" placeholder="اكتب المنطقة أو الوجهة" required>';
+   fields.appendChild(dest);
+  }
+  if(!document.getElementById('tripInvoiceField')){
+   const label=document.createElement('label');label.id='tripInvoiceField';label.className='trip-extra-field';label.innerHTML='🧾 فواتير الرحلة (صور أو PDF)<input id="tripInvoiceFiles" type="file" accept="image/*,.pdf" multiple><div id="tripInvoiceNames">اختيار ملفات الفواتير (حتى 5 ملفات، 8 ميغابايت لكل ملف).</div>';
+   fields.appendChild(label);
+   label.querySelector('input').addEventListener('change',function(){
+    const fs=[...this.files],names=document.getElementById('tripInvoiceNames');
+    if(fs.length>5){this.value='';names.textContent='الحد الأقصى 5 ملفات.';return;}
+    if(fs.some(f=>f.size>8*1024*1024)){this.value='';names.textContent='حجم الملف يجب ألا يتجاوز 8 ميغابايت.';return;}
+    if(fs.some(f=>!(f.type==='application/pdf'||f.type.startsWith('image/')))){this.value='';names.textContent='المسموح صور أو PDF فقط.';return;}
+    names.textContent=fs.length?fs.map(f=>f.name).join('، '):'لم يتم اختيار ملفات.';
+   });
+  }
+ };
+})();
 </script></body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
