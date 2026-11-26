@@ -302,7 +302,7 @@ document.getElementById('dpTripInvoices').value='';
 status.textContent='تعذر حفظ الرحلة: '+(e.message||String(e));
 }
 };document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
-}catch(e){console.warn('Driver portal bootstrap',e);if(driverMode){const fallback=document.createElement('section');fallback.id='asatuliDriverPortalError';fallback.style.cssText='max-width:640px;margin:24px auto;padding:20px;background:#fff;border:1px solid #ddd;border-radius:14px;color:#222';fallback.innerHTML='<h2>بوابة السائق</h2><p>'+escHTML(e?.message||'تعذر تحميل بيانات السائق')+'</p><button id="dpErrorLogout" style="padding:12px 18px;background:#a83238;color:#fff;border:0;border-radius:10px">تسجيل خروج</button>';document.body.appendChild(fallback);document.getElementById('dpErrorLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};}};
+}catch(e){console.warn('Driver portal bootstrap',e);if(driverMode){const fallback=document.createElement('section');fallback.id='asatuliDriverPortalError';fallback.style.cssText='max-width:640px;margin:24px auto;padding:20px;background:#fff;border:1px solid #ddd;border-radius:14px;color:#222';fallback.innerHTML='<h2>بوابة السائق</h2><p>'+escHTML(e?.message||'تعذر تحميل بيانات السائق')+'</p><button id="dpErrorLogout" style="padding:12px 18px;background:#a83238;color:#fff;border:0;border-radius:10px">تسجيل خروج</button>';document.body.appendChild(fallback);document.getElementById('dpErrorLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};}}};
 </script>
 
 
