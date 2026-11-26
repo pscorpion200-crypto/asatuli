@@ -858,8 +858,8 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
     const rec=(store.maintenance||[]).filter(m=>m.vehicle_id===v.id&&isOil(m)).sort((a,b)=>String(b.day||'').localeCompare(String(a.day||'')))[0];
     if(!rec){out.push({p:v.plate||v.type||'مركبة',s:'لم يتم تسجيل تغيير زيت',tag:'غير مسجل'});continue;}
     const notes=String(rec.notes||'');
-    const a=notes.match(/عداد وقت التغيير:\\s*(\\d+)/);
-    const b=notes.match(/العداد القادم:\\s*(\\d+)/);
+    const a=notes.match(/عداد وقت التغيير:\s*(\d+)/);
+    const b=notes.match(/العداد القادم:\s*(\d+)/);
     const start=a?Number(a[1]):null;
     const next=b?Number(b[1]):(start!==null?start+5000:null);
     const readings=(store.fuel||[]).filter(x=>x.vehicle_id===v.id&&x.odometer!=null&&Number(x.odometer)>0).map(x=>Number(x.odometer));
