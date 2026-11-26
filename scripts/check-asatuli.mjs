@@ -23,7 +23,7 @@ const driverAccountFunction = readFileSync(
   "utf8",
 );
 const driverRoleMigration = readFileSync(
-  resolve(root, "supabase/migrations/202611270001_driver_role.sql"),
+  resolve(root, "supabase/migrations/20261126221036_driver_role_and_scoped_portal.sql"),
   "utf8",
 );
 
