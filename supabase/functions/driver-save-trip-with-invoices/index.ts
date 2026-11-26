@@ -43,7 +43,7 @@ async function readBoundedFormData(req: Request): Promise<FormData> {
   if (!req.body) throw new HttpError(400, "بيانات الطلب فارغة");
 
   const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   let total = 0;
   try {
     while (true) {
@@ -54,7 +54,9 @@ async function readBoundedFormData(req: Request): Promise<FormData> {
         await reader.cancel();
         throw new HttpError(413, "إجمالي حجم المرفقات أكبر من الحد المسموح");
       }
-      chunks.push(value);
+      const chunk = new Uint8Array(value.byteLength);
+      chunk.set(value);
+      chunks.push(chunk);
     }
   } finally {
     reader.releaseLock();
@@ -192,7 +194,8 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", user.id)
       .limit(2);
     if (driverError) throw new HttpError(500, "تعذر التحقق من سجل السائق");
-    if (!drivers || drivers.length !== 1) {
+    const driverId = (drivers as unknown as Array<{ id: string }> | null)?.[0]?.id;
+    if (!drivers || drivers.length !== 1 || !driverId) {
       throw new HttpError(403, "حساب السائق غير مربوط بسجل سائق واحد في الشركة");
     }
 
@@ -238,7 +241,7 @@ Deno.serve(async (req: Request) => {
       id: tripId,
       company_id: companyId,
       vehicle_id: vehicleId,
-      driver_id: drivers[0].id,
+      driver_id: driverId,
       day,
       km,
       revenue,
