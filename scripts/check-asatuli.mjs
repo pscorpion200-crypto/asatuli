@@ -354,6 +354,40 @@ assert.ok(html.includes("role==='owner'||role==='manager'||role==='viewer'"), "O
 assert.ok(html.includes("else if(role==='driver')"), "Driver role must remain routed to the dedicated driver portal");
 assert.ok(html.includes('id="asatuli-session-bootstrap"'), "Saved Supabase sessions must be restored on page load");
 
+
+const loginFlowStart = html.indexOf("async function connectAndAuth(mode)");
+const loginFlowEnd = html.indexOf("window.connectAndAuth=connectAndAuth;", loginFlowStart);
+assert.ok(loginFlowStart >= 0 && loginFlowEnd > loginFlowStart, "Login flow source is missing");
+const loginFlow = html.slice(loginFlowStart, loginFlowEnd);
+assert.ok(
+  loginFlow.includes("await loadCloud();document.body.classList.remove('auth-gate');closeConnect();") &&
+    loginFlow.includes("await window.asatuliRouteByMembership();"),
+  "Successful sign-in must reveal the app after data load and explicitly route by membership",
+);
+assert.ok(
+  !loginFlow.includes("await window.initAsatuliDriverPortal?.();"),
+  "Login must not initialize the driver portal for every account",
+);
+const resumeFlowStart = html.indexOf("async function resumeCloudSession()");
+const resumeFlowEnd = html.indexOf("async function logoutCloud()", resumeFlowStart);
+assert.ok(resumeFlowStart >= 0 && resumeFlowEnd > resumeFlowStart, "Saved-session restore flow is missing");
+const resumeFlow = html.slice(resumeFlowStart, resumeFlowEnd);
+assert.ok(
+  resumeFlow.includes("await window.asatuliRouteByMembership();") &&
+    resumeFlow.includes("document.body.classList.remove('auth-gate')"),
+  "Restored sessions must reveal the app and route by active membership",
+);
+const routeStart = html.indexOf("async function routeByMembership()");
+const routeEnd = html.indexOf("const originalConnect=window.connectAndAuth", routeStart);
+assert.ok(routeStart >= 0 && routeEnd > routeStart, "Membership router source is missing");
+const routeSource = html.slice(routeStart, routeEnd);
+assert.ok(
+  routeSource.includes(".select('company_id,role')") &&
+    routeSource.includes(".eq('user_id',user.id)") &&
+    routeSource.includes("localStorage.setItem('asatuli_active_company',companyId)"),
+  "Membership routing must resolve the signed-in user's current company and role",
+);
+
 console.log(
   "PASS: " + blocks.length +
   " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
