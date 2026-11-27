@@ -227,11 +227,12 @@ Deno.serve(async (req: Request) => {
     if (existingTripError) {
       throw new HttpError(500, "تعذر التحقق من حالة إرسال الرحلة");
     }
-    if (existingTrip) {
+    const priorTrip = existingTrip as unknown as { id: string; attachments: string[] } | null;
+    if (priorTrip) {
       return jsonResponse({
         ok: true,
-        trip_id: existingTrip.id,
-        attachment_count: Array.isArray(existingTrip.attachments) ? existingTrip.attachments.length : 0,
+        trip_id: priorTrip.id,
+        attachment_count: Array.isArray(priorTrip.attachments) ? priorTrip.attachments.length : 0,
         duplicate: true,
       });
     }
@@ -288,13 +289,14 @@ Deno.serve(async (req: Request) => {
           .eq("submission_id", submissionId)
           .maybeSingle();
 
-        if (!duplicateLookupError && duplicateTrip) {
+        const concurrentTrip = duplicateTrip as unknown as { id: string; attachments: string[] } | null;
+        if (!duplicateLookupError && concurrentTrip) {
           await cleanupUploads(admin, uploadedPaths);
           uploadedPaths.length = 0;
           return jsonResponse({
             ok: true,
-            trip_id: duplicateTrip.id,
-            attachment_count: Array.isArray(duplicateTrip.attachments) ? duplicateTrip.attachments.length : 0,
+            trip_id: concurrentTrip.id,
+            attachment_count: Array.isArray(concurrentTrip.attachments) ? concurrentTrip.attachments.length : 0,
             duplicate: true,
           });
         }
