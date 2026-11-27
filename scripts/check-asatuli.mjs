@@ -148,8 +148,18 @@ assert.ok(
 assert.ok(policy.includes("CREATE POLICY trip_invoice_upload_assigned_driver"), "Assigned-driver upload policy is missing");
 assert.ok(policy.includes("TO authenticated"), "Invoice uploads must require an authenticated user");
 assert.ok(policy.includes("employee_assigned_vehicle"), "Invoice uploads must require an assigned vehicle");
-assert.ok(policy.includes("FROM public.drivers d"), "Invoice uploads must require a linked driver row");
+assert.ok(policy.includes("FROM public.drivers AS d"), "Invoice uploads must require a linked driver row");
+assert.ok(policy.includes("m.role = 'driver'"), "Invoice uploads must require a dedicated driver membership");
 assert.ok(policy.includes("(storage.foldername(storage.objects.name))[2] = (SELECT auth.uid())::text"), "Invoice uploads must be scoped to the uploader folder");
+assert.ok(policy.includes("d.company_id = ((storage.foldername(storage.objects.name))[1])::uuid"), "Driver-company check must use the uploaded object path");
+assert.ok(!policy.includes("storage.foldername(d.name)"), "Driver-company check must not parse the driver name as a storage path");
+
+assert.ok(html.includes(`onsubmit="event.preventDefault();window.connectAndAuth('login')"`), "Login form must call the explicit global login handler");
+assert.ok(html.includes("window.connectAndAuth=connectAndAuth;"), "Login handler must be exported before recovery routing");
+assert.ok(html.includes("window.asatuliRouteByMembership=routeByMembership;"), "Role router must be explicitly exposed");
+assert.ok(html.includes("role==='owner'||role==='manager'||role==='viewer'"), "Owner/manager/viewer roles must route to the manager interface");
+assert.ok(html.includes("else if(role==='driver')"), "Driver role must remain routed to the dedicated driver portal");
+assert.ok(html.includes('id="asatuli-session-bootstrap"'), "Saved Supabase sessions must be restored on page load");
 
 console.log(
   "PASS: " + blocks.length +
