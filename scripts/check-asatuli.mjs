@@ -30,6 +30,10 @@ const driverApprovalRepair = readFileSync(
   resolve(root, "supabase/operations/driver_portal_access_repair.sql"),
   "utf8",
 );
+const driverApprovalMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127181416_harden_employee_approval_driver_role_and_unique_link.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert.ok(blocks.length > 0, "No script blocks were found");
@@ -161,7 +165,7 @@ assert.ok(
   "Employee approval must never downgrade an owner or manager to a driver",
 );
 assert.ok(
-  driverApprovalRepair.includes("drivers_company_user_id_unique"),
+  driverApprovalMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS drivers_company_user_id_unique"),
   "Linked driver identity uniqueness must remain enforced",
 );
 assert.ok(
