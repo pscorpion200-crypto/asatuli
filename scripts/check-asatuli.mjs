@@ -451,7 +451,7 @@ const privilegedFunctions = [
 for (const signature of privilegedFunctions) {
   assert.ok(
     securityDefinerPathMigration.includes(
-      "ALTER FUNCTION public." + signature + "\\n  SET search_path = pg_catalog, public, pg_temp;",
+      "ALTER FUNCTION public." + signature + "\n  SET search_path = pg_catalog, public, pg_temp;",
     ),
     "SECURITY DEFINER function must put pg_catalog first and pg_temp last: " + signature,
   );
