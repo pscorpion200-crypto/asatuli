@@ -34,6 +34,10 @@ const driverApprovalMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127181416_harden_employee_approval_driver_role_and_unique_link.sql"),
   "utf8",
 );
+const duplicateDriverIndexCleanupMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127182000_remove_duplicate_driver_user_index.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert.ok(blocks.length > 0, "No script blocks were found");
@@ -167,6 +171,23 @@ assert.ok(
 assert.ok(
   driverApprovalMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS drivers_company_user_id_unique"),
   "Linked driver identity uniqueness must remain enforced",
+);
+assert.ok(
+  duplicateDriverIndexCleanupMigration.includes("DROP INDEX IF EXISTS public.drivers_company_user_id_unique") &&
+    duplicateDriverIndexCleanupMigration.includes("drivers_company_user_unique"),
+  "Duplicate linked-driver index cleanup must preserve the original unique index",
+);
+assert.ok(
+  html.includes("['loaded_meters','الأمتار المحملة','number']") &&
+    html.includes("<th>الأمتار المحملة</th>") &&
+    html.includes("Number(x.loaded_meters||0)"),
+  "Loaded meters must be editable, visible in trip records, and included in reporting",
+);
+assert.ok(
+  html.includes("data[key]=value") &&
+    html.includes("value<0") &&
+    html.includes("table==='trips'&&data.km<=0"),
+  "Fleet record forms must reject invalid or negative operational numbers",
 );
 assert.ok(
   !driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'viewer')"),
