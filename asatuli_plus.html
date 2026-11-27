@@ -966,6 +966,16 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
 (function(){
  const tables=['vehicles','drivers','fuel','maintenance','trips','employee_join_requests','employee_vehicle_assignments','member_permissions','member_invites','members','fleet_audit_log'];
  let channel=null,refreshTimer=null,refreshing=false,refreshQueued=false;
+ function setSyncStatus(label,state){
+  if(document.body.classList.contains('asatuli-driver-mode'))return;
+  let badge=document.getElementById('asatuliSyncIndicator');
+  if(!badge){
+   const host=document.querySelector('.top');if(!host)return;
+   if(!document.getElementById('asatuli-sync-indicator-style')){const style=document.createElement('style');style.id='asatuli-sync-indicator-style';style.textContent='#asatuliSyncIndicator{display:inline-flex;align-items:center;gap:8px;padding:8px 11px;border-radius:999px;background:#e9f8f1;color:#087f53;font-size:11px;font-weight:800;white-space:nowrap}#asatuliSyncIndicator:before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px #087f5318}#asatuliSyncIndicator[data-state="loading"]{background:#fff6e8;color:#a96808}#asatuliSyncIndicator[data-state="error"],#asatuliSyncIndicator[data-state="off"]{background:#fff0f0;color:#b8323c}';document.head.appendChild(style);}
+   badge=document.createElement('span');badge.id='asatuliSyncIndicator';host.appendChild(badge);
+  }
+  badge.textContent=label;badge.dataset.state=state;
+ }
  async function refreshFromDatabase(){
   if(!sb||!cloudMode||!companyId)return;
   if(refreshing){refreshQueued=true;return;}
@@ -974,27 +984,27 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
    await loadCloud();
    if(!document.body.classList.contains('asatuli-driver-mode')){render();renderMonthlyReport();}
    if(typeof window.refreshOwnerTripInvoices==='function')window.refreshOwnerTripInvoices();
-   document.body.dataset.asatuliSync='connected';
-  }catch(e){console.warn('Asatuli live refresh failed',e);document.body.dataset.asatuliSync='error';}
+   document.body.dataset.asatuliSync='connected';setSyncStatus('مزامنة مباشرة','on');
+  }catch(e){console.warn('Asatuli live refresh failed',e);document.body.dataset.asatuliSync='error';setSyncStatus('تعذر تحديث البيانات','error');}
   finally{refreshing=false;if(refreshQueued){refreshQueued=false;setTimeout(refreshFromDatabase,250);}}
  }
  function queueRefresh(){if(refreshTimer)clearTimeout(refreshTimer);refreshTimer=setTimeout(refreshFromDatabase,450);}
  window.startAsatuliRealtimeSync=function(){
   if(!sb||!cloudMode||!companyId)return false;
   if(channel){try{sb.removeChannel(channel);}catch(e){console.warn('Could not remove old Realtime channel',e);}channel=null;}
-  const currentCompany=companyId;
+  const currentCompany=companyId;setSyncStatus('جارٍ الاتصال بالمزامنة','loading');
   let next=sb.channel('asatuli-live-'+currentCompany);
   tables.forEach(table=>{next=next.on('postgres_changes',{event:'*',schema:'public',table},queueRefresh);});
   channel=next.subscribe(status=>{
-   if(status==='SUBSCRIBED'){document.body.dataset.asatuliSync='connected';}
-   else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){document.body.dataset.asatuliSync='disconnected';}
+   if(status==='SUBSCRIBED'){document.body.dataset.asatuliSync='connected';setSyncStatus('مزامنة مباشرة','on');}
+   else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){document.body.dataset.asatuliSync='disconnected';setSyncStatus('المزامنة غير متصلة','error');}
   });
   return true;
  };
  window.stopAsatuliRealtimeSync=function(){
   if(refreshTimer){clearTimeout(refreshTimer);refreshTimer=null;}
   if(channel&&sb){try{sb.removeChannel(channel);}catch(e){console.warn('Could not close Realtime channel',e);}}
-  channel=null;document.body.dataset.asatuliSync='disconnected';
+  channel=null;document.body.dataset.asatuliSync='disconnected';setSyncStatus('المزامنة متوقفة','off');
  };
  window.addEventListener('online',()=>{if(sb&&cloudMode){window.startAsatuliRealtimeSync();queueRefresh();}});
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&sb&&cloudMode)queueRefresh();});
