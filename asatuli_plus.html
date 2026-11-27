@@ -1702,6 +1702,33 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
 })();
 </script>
 
+<script id="asatuli-manager-navigation-recovery">
+(function(){
+ function repairManagerNavigation(){
+  if(document.body.classList.contains('asatuli-driver-mode'))return;
+  const app=document.querySelector('.app'); if(!app)return;
+  app.style.removeProperty('display');app.style.removeProperty('visibility');
+  const nav=document.querySelectorAll('.sidebar [data-view]');
+  nav.forEach(btn=>{
+   if(btn.dataset.recoveryBound==='1')return;
+   btn.dataset.recoveryBound='1';
+   btn.addEventListener('click',function(){
+    const target=this.dataset.view;if(!target)return;
+    document.querySelectorAll('.app .view').forEach(v=>{
+      v.classList.toggle('active',v.id===target);v.style.removeProperty('display');
+    });
+    nav.forEach(n=>n.classList.toggle('active',n.dataset.view===target));
+    const heading=document.getElementById('heading');
+    if(heading){const label=this.querySelector('.txt');heading.textContent=label?label.textContent:target;}
+    const add=document.getElementById('add');if(add)add.style.display=['dash','reports'].includes(target)?'none':'inline-block';
+   },true);
+  });
+ }
+ document.addEventListener('DOMContentLoaded',repairManagerNavigation);
+ document.body.addEventListener('click',function(){setTimeout(repairManagerNavigation,80);});
+ window.addEventListener('load',repairManagerNavigation);
+})();
+</script>
 </body>
 </html>
 
