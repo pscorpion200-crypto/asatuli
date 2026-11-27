@@ -55,13 +55,13 @@ assert.equal(
 );
 
 const markupForIds = html
-  .replace(/(<script\\b[^>]*>)[\\s\\S]*?<\\/script>/gi, "$1</script>")
-  .replace(/(<style\\b[^>]*>)[\\s\\S]*?<\\/style>/gi, "$1</style>");
-const htmlIds = [...markupForIds.matchAll(/\\bid=["']([^"']+)["']/gi)].map((match) => match[1]);
+  .replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, "$1</script>")
+  .replace(/(<style\b[^>]*>)[\s\S]*?<\/style>/gi, "$1</style>");
+const htmlIds = [...markupForIds.matchAll(/\bid=["']([^"']+)["']/gi)].map((match) => match[1]);
 const duplicateHtmlIds = htmlIds.filter((id, index) => htmlIds.indexOf(id) !== index);
 assert.deepEqual([...new Set(duplicateHtmlIds)], [], "Active HTML markup must not contain duplicate element IDs");
 
-const styleBodies = [...html.matchAll(/<style\\b[^>]*>([\\s\\S]*?)<\\/style>/gi)]
+const styleBodies = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)]
   .map((match) => match[1].trim())
   .filter(Boolean);
 assert.equal(new Set(styleBodies).size, styleBodies.length, "The page must not contain duplicate style blocks");
