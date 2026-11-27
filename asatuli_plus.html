@@ -152,7 +152,6 @@ function showFleetToast(message,kind='success'){
  if(window.__asatuliToastTimer)clearTimeout(window.__asatuliToastTimer);
  window.__asatuliToastTimer=setTimeout(()=>{node.style.opacity='0';},3500);
 }
-const oldSubmit=document.getElementById('recordForm').onsubmit;
 document.getElementById('recordForm').onsubmit=async e=>{
  e.preventDefault();
  const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
@@ -179,7 +178,7 @@ document.getElementById('recordForm').onsubmit=async e=>{
    const rows=store[table],saved=savedRows[0],index=rows.findIndex(x=>x.id===saved.id);
    if(index>=0)rows[index]=saved;else rows.push(saved);
    editingId=null;closeModal();render();
-   showFleetToast(refreshWarning||('تم حفظ '+(names[table]||'السجل')+' بنجاح'+(oldSubmit?'':'')+'.'),refreshWarning?'warning':'success');
+   showFleetToast(refreshWarning||('تم حفظ '+(names[table]||'السجل')+' بنجاح.'),refreshWarning?'warning':'success');
   }else{
    if(editingId){const i=store[table].findIndex(x=>x.id===editingId);if(i>=0)store[table][i]={...store[table][i],...data};}
    else store[table].push(data);
