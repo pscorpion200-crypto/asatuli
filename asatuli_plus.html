@@ -1116,11 +1116,54 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
    if(box)box.innerHTML=out.map(x=>'<div class="alert"><span><b>'+escHTML(x.p)+'</b> — '+escHTML(x.s)+'</span><span class="pill '+(x.warn?'warn':x.soon?'warn':'blue')+'">'+x.tag+'</span></div>').join('')||'<div class="sub">لا توجد مركبات.</div>';
   }
   draw();
-  setInterval(draw,4000);
+  const previousRender = window.render;
+  if (typeof previousRender === "function") {
+    window.render = function(...args) {
+      const result = previousRender.apply(this, args);
+      draw();
+      return result;
+    };
+  }
+  const previousLoadCloud = window.loadCloud;
+  if (typeof previousLoadCloud === "function") {
+    window.loadCloud = async function(...args) {
+      const result = await previousLoadCloud.apply(this, args);
+      draw();
+      return result;
+    };
+  }
  }catch(e){console.warn('Oil vehicle overview',e);}
 })();
 </script>
 
+<script id="oil-odometer-auto-calc">
+(function(){
+  function bindOilNextOdometer(){
+    const odo = document.getElementById("dpOilOdo");
+    const next = document.getElementById("dpOilNextOdo");
+    if (!odo || !next || odo.dataset.oilNextBound === "1") return false;
+    odo.dataset.oilNextBound = "1";
+    next.readOnly = true;
+    next.placeholder = "يُحسب تلقائياً +5000 كم";
+    const update = () => {
+      const raw = odo.value.trim();
+      const current = Number(raw);
+      next.value = raw !== "" && Number.isFinite(current) && current >= 0
+        ? String(current + 5000)
+        : "";
+    };
+    odo.addEventListener("input", update);
+    update();
+    return true;
+  }
+
+  if (bindOilNextOdometer()) return;
+  const observer = new MutationObserver(() => {
+    if (bindOilNextOdometer()) observer.disconnect();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
 <script id="asatuli-realtime-sync-v1">
 // Live fleet refresh across signed-in devices. Postgres Changes are protected by table RLS.
 (function(){
