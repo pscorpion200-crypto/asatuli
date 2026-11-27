@@ -28,7 +28,7 @@ const driverRoleMigration = readFileSync(
   "utf8",
 );
 const tripSubmissionIdempotencyMigration = readFileSync(
-  resolve(root, "supabase/migrations/20261128210000_trip_submission_idempotency.sql"),
+  resolve(root, "supabase/migrations/20261127223849_trip_submission_idempotency.sql"),
   "utf8",
 );
 const driverApprovalRepair = readFileSync(
