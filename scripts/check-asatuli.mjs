@@ -35,7 +35,7 @@ const driverApprovalMigration = readFileSync(
   "utf8",
 );
 const duplicateDriverIndexCleanupMigration = readFileSync(
-  resolve(root, "supabase/migrations/20261127182000_remove_duplicate_driver_user_index.sql"),
+  resolve(root, "supabase/migrations/20261127182508_remove_duplicate_driver_user_index.sql"),
   "utf8",
 );
 
