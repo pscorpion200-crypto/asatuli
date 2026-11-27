@@ -100,6 +100,17 @@ for (const sourcePath of collectSourceFiles(root)) {
 }
 const duplicatedSourceFiles = [...sourceHashes.values()].filter((paths) => paths.length > 1);
 assert.deepEqual(duplicatedSourceFiles, [], "Repository must not contain byte-for-byte duplicate source files");
+
+assert.ok(
+  html.includes('id="oil-odometer-auto-calc"') &&
+    html.includes("String(current + 5000)") &&
+    html.includes("window.initAsatuliDriverPortal"),
+  "Driver oil interval must calculate the next service at 5,000 km when the portal initializes",
+);
+assert.ok(
+  !html.includes("setInterval(draw,4000)"),
+  "Oil overview must update through data refresh/render hooks, not a four-second polling loop",
+);
 assert.ok(blocks.length > 0, "No script blocks were found");
 
 for (let index = 0; index < blocks.length; index += 1) {
