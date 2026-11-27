@@ -72,6 +72,11 @@ BEGIN
   DO UPDATE SET role = 'driver'
   WHERE existing_member.role IN ('viewer', 'driver');
 
+  -- A dedicated driver must not retain manager/viewer module grants.
+  DELETE FROM public.member_permissions
+   WHERE company_id = v_company
+     AND user_id = p_user_id;
+
   -- Reuse an already-linked roster row before matching by phone.
   SELECT count(*)
     INTO v_match_count
@@ -145,4 +150,3 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.owner_approve_employee(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.owner_approve_employee(uuid, uuid) TO authenticated;
-
