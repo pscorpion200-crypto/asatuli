@@ -534,7 +534,7 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
 })();
 <\/script><script id="owner-trip-invoice-upload">
 (async function(){try{
- if(!window.sb||!window.cloudMode||!window.companyId)return;
+ if(!sb||!cloudMode||!companyId)return;
  const {data:owner,error:oe}=await sb.rpc('is_company_owner',{p_company_id:companyId});if(oe||owner!==true)return;
  let host=document.getElementById('ownerTripInvoiceReview');for(let wait=0;!host&&wait<30;wait++){await new Promise(r=>setTimeout(r,300));host=document.getElementById('ownerTripInvoiceReview');}if(!host)return;
  const panel=document.createElement('div');panel.className='card';panel.style.margin='12px 0';panel.innerHTML='<h3>إرفاق فاتورة برحلة مسجلة</h3><label>اختر الرحلة<select id="ownerInvoiceTrip" style="display:block;width:100%;padding:12px;margin:8px 0;border-radius:10px"></select></label><label>الفواتير (صور أو PDF)<input id="ownerInvoiceFiles" type="file" accept="image/*,.pdf" multiple style="display:block;width:100%;padding:12px;margin:8px 0"></label><button class="btn" id="ownerInvoiceUpload">رفع الفواتير وربطها بالرحلة</button><div id="ownerInvoiceUploadStatus" class="sub" style="margin-top:8px"></div>';
@@ -1652,11 +1652,11 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
 
   async function routeByMembership(){
     if(!window.sb||!window.cloudMode||!window.companyId)return;
-    const auth=await window.sb.auth.getUser();
+    const auth=await sb.auth.getUser();
     const user=auth.data&&auth.data.user;
     if(!user)return;
-    const result=await window.sb.from('members').select('role')
-      .eq('company_id',window.companyId).eq('user_id',user.id).maybeSingle();
+    const result=await sb.from('members').select('role')
+      .eq('company_id',companyId).eq('user_id',user.id).maybeSingle();
     if(result.error)throw result.error;
     const role=result.data&&result.data.role;
     if(role==='owner'||role==='manager'||role==='viewer'){
@@ -1676,7 +1676,7 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
   if(typeof originalConnect==='function'){
     window.connectAndAuth=async function(mode){
       await originalConnect(mode);
-      if(!document.body.classList.contains('auth-gate')&&window.cloudMode){
+      if(!document.body.classList.contains('auth-gate')&&cloudMode){
         try{await routeByMembership();}
         catch(error){
           const status=document.getElementById('connectStatus');
