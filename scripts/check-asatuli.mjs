@@ -44,6 +44,10 @@ const removedMemberAccessMigration = readFileSync(
   "utf8",
 );
 const edgeConfig = readFileSync(resolve(root, "supabase/config.toml"), "utf8");
+const unusedRpcRevocationMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127185742_revoke_unused_legacy_rpc_endpoints.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 
@@ -293,6 +297,19 @@ assert.ok(
     (edgeConfig.match(/verify_jwt = true/g) || []).length === 2,
   "Both authenticated Edge Functions must require platform JWT verification",
 );
+
+for (const unusedRpc of [
+  "can_manage_company(uuid)",
+  "employee_request_join(text, text)",
+  "employee_submit_join_request(text, text)",
+  "owner_add_member(uuid, uuid, text)",
+  "owner_approve_employee(uuid, uuid)",
+]) {
+  assert.ok(
+    unusedRpcRevocationMigration.includes("REVOKE ALL ON FUNCTION public." + unusedRpc),
+    "Unused legacy RPC execution must remain revoked: " + unusedRpc,
+  );
+}
 
 assert.ok(
   removedMemberAccessMigration.includes("JOIN public.members AS m"),
