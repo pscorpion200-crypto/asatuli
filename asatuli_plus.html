@@ -322,7 +322,7 @@ body.auth-gate #connectModal .login-submit{
     </div>
     <h2>مرحباً بك في أسطولي</h2>
     <p class="alv3-intro">سجّل دخولك للوصول إلى نظام إدارة الأسطول</p>
-    <form id="asatuliLoginForm" onsubmit="event.preventDefault();connectAndAuth('login')">
+    <form id="asatuliLoginForm" onsubmit="event.preventDefault();window.connectAndAuth('login')">
      <div class="login-hidden-config" aria-hidden="true">
       <input id="sbUrl" type="hidden" value="https://aicvzcxrakhzlcfosvsx.supabase.co"/>
       <input id="sbKey" type="hidden" value="sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS"/>
@@ -361,6 +361,7 @@ let sb=null, companyId=null, cloudMode=false;
 function openConnect(){document.getElementById('connectModal').classList.add('open');let cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');document.getElementById('sbUrl').value=cfg.url||'https://aicvzcxrakhzlcfosvsx.supabase.co';document.getElementById('sbKey').value=cfg.key||'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS';document.getElementById('connectStatus').textContent=''}
 function closeConnect(){if(document.body.classList.contains('auth-gate'))return;document.getElementById('connectModal').classList.remove('open')}
 async function connectAndAuth(mode){const status=document.getElementById('connectStatus');if(mode!=='login'){status.textContent='إنشاء الحسابات غير متاح من شاشة الدخول. تواصل مع مسؤول النظام.';return;}try{const url=document.getElementById('sbUrl').value.trim(),key=document.getElementById('sbKey').value.trim(),identifier=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPass').value,company=document.getElementById('companyName').value.trim();let email=identifier.includes('@')?identifier:('driver-'+identifier.replace(/\D/g,'')+'@asatuli.local');if(!url||!key||!identifier||!password)throw Error('أدخل الرابط والمفتاح واسم المستخدم أو البريد وكلمة المرور.');if(mode==='signup'&&!company)throw Error('أدخل اسم الشركة قبل إنشاء الحساب.');if(mode==='signup'&&password.length<6)throw Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');localStorage.setItem('asatuli_sb_cfg',JSON.stringify({url,key}));sb=window.supabase.createClient(url,key);let result;if(mode==='signup'){result=await sb.auth.signUp({email,password});if(result.error)throw result.error;if(!result.data.user)throw Error('لم يتم إنشاء المستخدم.');if(!result.data.session){localStorage.setItem('asatuli_pending_company',company);status.textContent='تم إنشاء الحساب. أكّد بريدك الإلكتروني، ثم سجّل الدخول. سنكمل إنشاء الشركة تلقائياً.';return;}await sb.rpc('accept_member_invites');let mem0=await sb.from('members').select('company_id');if(mem0.data?.length){companyId=mem0.data[0].company_id;}else{let rpc=await sb.rpc('create_company',{p_name:company});if(rpc.error)throw rpc.error;companyId=rpc.data;}}else{result=await sb.auth.signInWithPassword({email,password});if(result.error)throw result.error;await sb.rpc('accept_member_invites');let mem=await sb.from('members').select('company_id').order('company_id');if(mem.error)throw mem.error;if(!mem.data.length){let pendingCompany=document.getElementById('companyName').value.trim()||localStorage.getItem('asatuli_pending_company')||'';if(!pendingCompany)throw Error('دخل اسم الشركة لإنشاء الشركة المرتبطة بحسابك.');let rpc=await sb.rpc('create_company',{p_name:pendingCompany});if(rpc.error)throw rpc.error;companyId=rpc.data;localStorage.removeItem('asatuli_pending_company');}else {let ids=[...new Set(mem.data.map(x=>x.company_id))];if(ids.length>1){let choices=await Promise.all(ids.map(async id=>{let c=await sb.from('companies').select('name').eq('id',id).single();return {id,name:c.data?.name||id}}));let promptText='اختر الشركة برقم:\n'+choices.map((c,i)=>(i+1)+'. '+c.name).join('\n');let n=Number(prompt(promptText,'1'));if(!n||n<1||n>choices.length)throw Error('لم يتم اختيار شركة.');companyId=choices[n-1].id;}else companyId=ids[0];}}cloudMode=true;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();await refreshAuditOwnerUI();renderMonthlyReport();status.textContent='تم الاتصال وتحميل بيانات الشركة بنجاح.';render();document.body.classList.remove('auth-gate');closeConnect();await window.initAsatuliDriverPortal?.();window.startAsatuliRealtimeSync?.();alert('تم الاتصال بقاعدة البيانات.');}catch(e){status.textContent=e.message||String(e)}}
+window.connectAndAuth=connectAndAuth;
 async function loadCloud(){if(!sb)return;const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};for(const k of Object.keys(tables)){let q=sb.from(tables[k]).select('*');if(companyId)q=q.eq('company_id',companyId);const {data,error}=await q;if(error)throw error;store[k]=data||[];}}
 const oldSave=save;save=function(){if(!cloudMode){oldSave();return;}localStorage.setItem('asatuli_demo',JSON.stringify(store));};
 const oldRender=render;render=function(){oldRender();};
@@ -1630,11 +1631,11 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
     const app=document.querySelector('.app');
     const dash=document.getElementById('dash');
     if(!app||!dash)return false;
-    app.style.setProperty('display','flex','important');
-    app.style.setProperty('visibility','visible','important');
-    app.style.setProperty('opacity','1','important');
-    app.style.setProperty('position','relative','important');
-    app.style.setProperty('z-index','1','important');
+    app.style.removeProperty('display');
+    app.style.removeProperty('visibility');
+    app.style.removeProperty('opacity');
+    app.style.removeProperty('position');
+    app.style.removeProperty('z-index');
     document.querySelectorAll('.app .view').forEach(view=>{
       view.classList.toggle('active',view.id==='dash');
       view.style.setProperty('display',view.id==='dash'?'block':'none','important');
@@ -1682,7 +1683,9 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
         try{await routeByMembership();}
         catch(error){
           const status=document.getElementById('connectStatus');
-          if(status)status.textContent='تم تسجيل الدخول لكن تعذر فتح الصفحة: '+(error.message||error);
+          const message='تعذر تحديد صفحة الحساب بعد تسجيل الدخول: '+(error.message||error);
+          if(status)status.textContent=message;
+          if(typeof showFleetToast==='function')showFleetToast(message,'error');
           console.error('Asatuli role routing failed',error);
         }
       }
@@ -1701,6 +1704,7 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
   }
 
   window.asatuliShowManagerDashboard=showManagerDashboard;
+  window.asatuliRouteByMembership=routeByMembership;
 })();
 </script>
 
@@ -1729,6 +1733,24 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
  document.addEventListener('DOMContentLoaded',repairManagerNavigation);
  document.body.addEventListener('click',function(){setTimeout(repairManagerNavigation,80);});
  window.addEventListener('load',repairManagerNavigation);
+})();
+</script>
+
+<script id="asatuli-session-bootstrap">
+(function(){
+  async function restoreSavedSession(){
+    try{
+      if(typeof window.resumeCloudSession!=='function')return;
+      await window.resumeCloudSession();
+    }catch(error){
+      console.warn('Asatuli saved-session restore failed',error);
+    }
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',restoreSavedSession,{once:true});
+  }else{
+    restoreSavedSession();
+  }
 })();
 </script>
 </body>
