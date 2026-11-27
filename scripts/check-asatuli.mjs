@@ -43,6 +43,7 @@ const removedMemberAccessMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127185231_revoke_removed_member_vehicle_and_invoice_access.sql"),
   "utf8",
 );
+const edgeConfig = readFileSync(resolve(root, "supabase/config.toml"), "utf8");
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 
@@ -271,6 +272,26 @@ assert.ok(
 assert.ok(
   driverRoleMigration.includes("d.id = trips.driver_id"),
   "Drivers must only read their own trip rows",
+);
+
+assert.ok(
+  driverAccountFunction.includes('req.method !== "POST"') &&
+    driverAccountFunction.includes("readBoundedJson(req)") &&
+    driverAccountFunction.includes("MAX_REQUEST_SIZE = 16 * 1024"),
+  "Driver account creation must reject unsupported methods and bound JSON request bodies",
+);
+assert.ok(
+  driverAccountFunction.includes("auth.getUser()") &&
+    driverAccountFunction.includes('rpc("is_company_owner"') &&
+    driverAccountFunction.includes("UUID_RE.test(vehicle_id)") &&
+    driverAccountFunction.includes("phoneDigits.length < 8"),
+  "Driver account creation must verify the signed-in owner and validate the account inputs",
+);
+assert.ok(
+  edgeConfig.includes("[functions.owner-create-driver]") &&
+    edgeConfig.includes("[functions.driver-save-trip-with-invoices]") &&
+    (edgeConfig.match(/verify_jwt = true/g) || []).length === 2,
+  "Both authenticated Edge Functions must require platform JWT verification",
 );
 
 assert.ok(
