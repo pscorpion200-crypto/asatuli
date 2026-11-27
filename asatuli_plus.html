@@ -1141,7 +1141,7 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
   function bindOilNextOdometer(){
     const odo = document.getElementById("dpOilOdo");
     const next = document.getElementById("dpOilNextOdo");
-    if (!odo || !next || odo.dataset.oilNextBound === "1") return false;
+    if (!odo || !next || odo.dataset.oilNextBound === "1") return;
     odo.dataset.oilNextBound = "1";
     next.readOnly = true;
     next.placeholder = "يُحسب تلقائياً +5000 كم";
@@ -1154,14 +1154,17 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
     };
     odo.addEventListener("input", update);
     update();
-    return true;
   }
 
-  if (bindOilNextOdometer()) return;
-  const observer = new MutationObserver(() => {
-    if (bindOilNextOdometer()) observer.disconnect();
-  });
-  observer.observe(document.body, { childList: true, subtree: true });
+  bindOilNextOdometer();
+  const originalInit = window.initAsatuliDriverPortal;
+  if (typeof originalInit === "function") {
+    window.initAsatuliDriverPortal = async function(...args) {
+      const result = await originalInit.apply(this, args);
+      bindOilNextOdometer();
+      return result;
+    };
+  }
 })();
 </script>
 <script id="asatuli-realtime-sync-v1">
