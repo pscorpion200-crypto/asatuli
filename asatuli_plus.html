@@ -560,6 +560,35 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
 })();
 <\/script>
 
+
+<style id="asatuli-login-force-final">
+/* final login override: appended after every legacy stylesheet */
+body.auth-gate #connectModal{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important;overflow:auto!important;background:linear-gradient(135deg,#031328 0%,#07345b 55%,#041326 100%)!important}
+body.auth-gate #connectModal .modalbox.brand-login{width:min(620px,96vw)!important;max-width:620px!important;margin:auto!important;display:flex!important;flex-direction:column!important;gap:0!important;background:transparent!important;border:0!important;border-radius:24px!important;box-shadow:none!important;padding:0!important;overflow:visible!important}
+body.auth-gate #connectModal .login-identity{background:transparent!important;color:#fff!important;text-align:center!important;padding:14px 14px 20px!important;min-height:0!important}
+body.auth-gate #connectModal .login-orbit{display:none!important}
+body.auth-gate #connectModal .login-kicker{color:#9bdcff!important;font-size:11px!important;letter-spacing:2px!important}
+body.auth-gate #connectModal .login-identity h2{color:#fff!important;font-size:clamp(38px,8vw,60px)!important;margin:4px 0 8px!important;text-shadow:0 0 20px #009dff!important}
+body.auth-gate #connectModal .login-identity-copy{color:#dceeff!important;font-size:14px!important;line-height:1.75!important;margin:8px auto!important}
+body.auth-gate #connectModal .login-feature-list{display:flex!important;justify-content:center!important;gap:8px!important;flex-wrap:wrap!important;margin:10px auto!important}
+body.auth-gate #connectModal .login-feature-list div{background:#0b3155!important;border:1px solid #49baff66!important;border-radius:12px!important;padding:8px 12px!important;color:#eaf7ff!important}
+body.auth-gate #connectModal .login-feature-list div span{display:none!important}
+body.auth-gate #connectModal .login-identity-footer{color:#b5d9f5!important}
+body.auth-gate #connectModal .login-panel{width:min(540px,94vw)!important;margin:0 auto!important;padding:25px clamp(16px,4vw,34px)!important;border-radius:27px!important;background:linear-gradient(145deg,rgba(16,55,94,.94),rgba(3,20,41,.96))!important;border:1px solid rgba(137,215,255,.65)!important;box-shadow:0 0 25px #008cff44,0 24px 60px #0008!important;backdrop-filter:blur(16px)!important;color:#fff!important}
+body.auth-gate #connectModal .login-panel-top{color:#c6eaff!important;text-align:center!important}
+body.auth-gate #connectModal .login-lock{display:none!important}
+body.auth-gate #connectModal .login-panel h3{color:#fff!important;text-align:center!important;font-size:27px!important;margin:6px 0!important}
+body.auth-gate #connectModal .login-description{color:#dceeff!important;text-align:center!important}
+body.auth-gate #connectModal .login-field{color:#e8f6ff!important}
+body.auth-gate #connectModal .login-field input{background:#061c36!important;border:1px solid #62baff88!important;color:#fff!important;border-radius:15px!important;height:54px!important}
+body.auth-gate #connectModal .login-field input::placeholder{color:#b5cbe0!important}
+body.auth-gate #connectModal .login-password-wrap{position:relative!important}
+body.auth-gate #connectModal .login-toggle{position:absolute!important;left:8px!important;top:50%!important;transform:translateY(-50%)!important;border:1px solid #55baff!important;background:#0d3760!important;color:#fff!important;border-radius:10px!important;padding:7px 10px!important}
+body.auth-gate #connectModal .login-password-wrap input{padding-left:80px!important}
+body.auth-gate #connectModal .login-submit{width:100%!important;height:55px!important;border-radius:15px!important;background:linear-gradient(110deg,#08aaff,#0753c9)!important;border:1px solid #7bd9ff!important;color:#fff!important;box-shadow:0 0 20px #009dff44!important;font-size:17px!important}
+body.auth-gate #connectModal .login-security{color:#c5e6ff!important;text-align:center!important}
+@media(max-width:600px){body.auth-gate #connectModal{padding:9px!important}body.auth-gate #connectModal .login-identity{padding:5px 5px 12px!important}body.auth-gate #connectModal .login-identity h2{font-size:42px!important}body.auth-gate #connectModal .login-identity-copy{font-size:13px!important}body.auth-gate #connectModal .login-panel{padding:19px 15px!important;border-radius:23px!important}body.auth-gate #connectModal .login-panel h3{font-size:24px!important}body.auth-gate #connectModal .login-field input{height:50px!important}}
+</style>
 </body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
