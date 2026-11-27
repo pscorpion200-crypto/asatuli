@@ -457,6 +457,26 @@ for (const signature of privilegedFunctions) {
   );
 }
 
+const operationalDataConstraintsMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127193205_enforce_operational_data_integrity_checks.sql"),
+  "utf8",
+);
+for (const requiredConstraint of [
+  "CHECK (liters > 0)",
+  "CHECK (km > 0)",
+  "CHECK (loaded_meters >= 0)",
+  "CHECK (revenue >= 0)",
+  "CHECK (other_cost >= 0)",
+  "CHECK (cost >= 0)",
+  "CHECK (char_length(btrim(plate)) > 0)",
+  "CHECK (char_length(btrim(name)) > 0)",
+]) {
+  assert.ok(
+    operationalDataConstraintsMigration.includes(requiredConstraint),
+    "Database migration must enforce operational input rule: " + requiredConstraint,
+  );
+}
+
 console.log(
   "PASS: " + blocks.length +
   " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
