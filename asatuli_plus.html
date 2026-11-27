@@ -1173,3 +1173,31 @@ window.toggleAsatuliPassword=function(button){
  button.setAttribute('aria-label',show?'إخفاء كلمة المرور':'إظهار كلمة المرور');
 };
 </script>
+
+<style id="asatuli-login-background-upgrade">
+body.auth-gate #connectModal,#connectModal.open{
+ background:
+ radial-gradient(ellipse at 82% 18%,rgba(16,154,255,.26),transparent 42%),
+ radial-gradient(ellipse at 10% 85%,rgba(27,112,220,.22),transparent 40%),
+ linear-gradient(135deg,#06152b 0%,#0b2341 48%,#061326 100%)!important;
+ overflow-y:auto!important;
+}
+body.auth-gate #connectModal:before,#connectModal.open:before{
+ content:"";position:fixed;inset:0;pointer-events:none;opacity:.17;
+ background-image:linear-gradient(120deg,transparent 48%,#83c5ff22 49%,#83c5ff22 50%,transparent 51%),linear-gradient(30deg,transparent 48%,#83c5ff15 49%,#83c5ff15 50%,transparent 51%);
+ background-size:90px 90px,130px 130px;
+}
+#connectModal .login-identity{
+ background:
+ radial-gradient(ellipse at 85% 82%,rgba(0,166,255,.22),transparent 35%),
+ radial-gradient(ellipse at 8% 12%,rgba(116,190,255,.22),transparent 42%),
+ linear-gradient(145deg,#0b3157 0%,#0a2442 52%,#07172c 100%)!important;
+}
+#connectModal .login-identity:before{border-color:#61baff28!important;box-shadow:0 0 0 34px #5cb9ff08,0 0 0 74px #5cb9ff05!important}
+#connectModal .login-identity:after{border-color:#61baff24!important;box-shadow:0 0 0 28px #5cb9ff08,0 0 0 60px #5cb9ff04!important}
+#connectModal .login-orbit{border-color:#4bb6ff60!important;background:linear-gradient(145deg,#35a8ff35,#ffffff08)!important;box-shadow:0 0 40px #1b96ff1a,0 16px 38px #06172b55!important}
+#connectModal .login-panel{background:linear-gradient(160deg,#ffffff 0%,#f5f9ff 100%)!important}
+#connectModal .login-submit{background:linear-gradient(115deg,#17a2fa,#1763c5 55%,#174e99)!important;box-shadow:0 12px 28px #187bd542!important}
+#connectModal .login-submit:focus-visible,#connectModal .login-toggle:focus-visible{outline:3px solid #5db6ff;outline-offset:3px}
+@media(max-width:720px){body.auth-gate #connectModal,#connectModal.open{background:radial-gradient(ellipse at 80% 15%,#1597ff30,transparent 40%),linear-gradient(145deg,#06152b,#102d4c 60%,#061326)!important}}
+</style>
