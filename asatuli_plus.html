@@ -145,7 +145,54 @@ async function connectAndAuth(mode){const status=document.getElementById('connec
 async function loadCloud(){if(!sb)return;const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};for(const k of Object.keys(tables)){let q=sb.from(tables[k]).select('*');if(companyId)q=q.eq('company_id',companyId);const {data,error}=await q;if(error)throw error;store[k]=data||[];}}
 const oldSave=save;save=function(){if(!cloudMode){oldSave();return;}localStorage.setItem('asatuli_demo',JSON.stringify(store));};
 const oldRender=render;render=function(){oldRender();};
-const oldSubmit=document.getElementById('recordForm').onsubmit;document.getElementById('recordForm').onsubmit=async e=>{e.preventDefault();let data=Object.fromEntries(new FormData(e.target).entries());data.id=editingId||crypto.randomUUID();if(cloudMode){data.company_id=companyId;const table=currentType;let query=editingId?sb.from(table).update(data).eq('id',editingId).select('id'):sb.from(table).insert(data).select('id');let {data:savedRows,error}=await query;if(error){alert('حفظ فشل: '+error.message);return;}if(!savedRows?.length){alert('لم تؤكد قاعدة البيانات حفظ السجل. تحقق من صلاحيات الحساب ثم أعد المحاولة.');return;}await loadCloud();}else if(editingId){let i=store[currentType].findIndex(x=>x.id===editingId);if(i>=0)store[currentType][i]={...store[currentType][i],...data};}else store[currentType].push(data);editingId=null;closeModal();render();};
+function showFleetToast(message,kind='success'){
+ let node=document.getElementById('fleetToastNotice');
+ if(!node){node=document.createElement('div');node.id='fleetToastNotice';node.setAttribute('role','status');node.setAttribute('aria-live','polite');node.style.cssText='position:fixed;top:calc(env(safe-area-inset-top) + 14px);right:50%;transform:translateX(50%);z-index:2147483000;max-width:min(92vw,560px);padding:13px 18px;border-radius:14px;color:#fff;font:800 13px system-ui,Arial;text-align:center;box-shadow:0 12px 32px #10243f30;opacity:0;transition:opacity .2s;pointer-events:none;';document.body.appendChild(node);}
+ node.textContent=message;node.style.background=kind==='error'?'#b8323c':kind==='warning'?'#9a6700':'#087f53';node.style.opacity='1';
+ if(window.__asatuliToastTimer)clearTimeout(window.__asatuliToastTimer);
+ window.__asatuliToastTimer=setTimeout(()=>{node.style.opacity='0';},3500);
+}
+const oldSubmit=document.getElementById('recordForm').onsubmit;
+document.getElementById('recordForm').onsubmit=async e=>{
+ e.preventDefault();
+ const form=e.currentTarget,button=form.querySelector('button[type="submit"]');
+ if(form.dataset.saving==='1')return;
+ const originalLabel=button?.textContent||'حفظ';
+ form.dataset.saving='1';
+ if(button){button.disabled=true;button.textContent='جار الحفظ...';}
+ try{
+  const data=Object.fromEntries(new FormData(form).entries());
+  const table=currentType;
+  if(!table||!Array.isArray(store[table]))throw new Error('نوع السجل غير معروف. أغلق النافذة وافتحها من جديد.');
+  data.id=editingId||crypto.randomUUID();
+  if(cloudMode){
+   if(!sb||!companyId)throw new Error('الاتصال بقاعدة البيانات غير جاهز. أعد تسجيل الدخول.');
+   data.company_id=companyId;
+   const query=editingId
+    ?sb.from(table).update(data).eq('id',editingId).eq('company_id',companyId).select('*')
+    :sb.from(table).insert(data).select('*');
+   const {data:savedRows,error}=await query;
+   if(error)throw error;
+   if(!savedRows?.length)throw new Error('لم تؤكد قاعدة البيانات حفظ السجل. تحقق من صلاحيات الحساب ثم أعد المحاولة.');
+   let refreshWarning='';
+   try{await loadCloud();}catch(refreshError){refreshWarning='تم حفظ السجل، لكن تعذر تحديث القائمة بالكامل. أعد تحميل الصفحة.';}
+   const rows=store[table],saved=savedRows[0],index=rows.findIndex(x=>x.id===saved.id);
+   if(index>=0)rows[index]=saved;else rows.push(saved);
+   editingId=null;closeModal();render();
+   showFleetToast(refreshWarning||('تم حفظ '+(names[table]||'السجل')+' بنجاح'+(oldSubmit?'':'')+'.'),refreshWarning?'warning':'success');
+  }else{
+   if(editingId){const i=store[table].findIndex(x=>x.id===editingId);if(i>=0)store[table][i]={...store[table][i],...data};}
+   else store[table].push(data);
+   editingId=null;closeModal();render();showFleetToast('تم حفظ السجل على هذا الجهاز بنجاح.','success');
+  }
+ }catch(error){
+  const message=error?.message||String(error);
+  showFleetToast('تعذر الحفظ: '+message,'error');
+ }finally{
+  form.dataset.saving='0';
+  if(button){button.disabled=false;button.textContent=originalLabel;}
+ }
+};
 const oldDel=del;del=async function(type,id){if(!confirm('حذف هذا السجل؟'))return;if(cloudMode){let {data:deletedRows,error}=await sb.from(type).delete().eq('id',id).select('id');if(error){alert(error.message);return;}if(!deletedRows?.length){alert('لم يتم حذف السجل؛ قد لا تملك صلاحية الحذف.');return;}await loadCloud();}else store[type]=store[type].filter(x=>x.id!==id);render();};
 function exportFleetVehicleSummaryCSV(){const rows=[['المركبة','الحالة','الكيلومترات','الإيرادات','الوقود','الصيانة','مصاريف أخرى','إجمالي المصروفات','صافي الفرق','لتر/100 كم']];store.vehicles.forEach(v=>{const trips=store.trips.filter(x=>x.vehicle_id===v.id),fuel=store.fuel.filter(x=>x.vehicle_id===v.id),maint=store.maintenance.filter(x=>x.vehicle_id===v.id);const km=trips.reduce((a,x)=>a+Number(x.km||0),0),rev=trips.reduce((a,x)=>a+Number(x.revenue||0),0),fc=fuel.reduce((a,x)=>a+Number(x.price||0),0),lit=fuel.reduce((a,x)=>a+Number(x.liters||0),0),mc=maint.reduce((a,x)=>a+Number(x.cost||0),0),other=trips.reduce((a,x)=>a+Number(x.other_cost||0),0),total=fc+mc+other;rows.push([v.plate,v.status||'نشطة',km,money(rev),money(fc),money(mc),money(other),money(total),money(rev-total),km&&lit?money(lit*100/km):'']);});const csv='\ufeff'+rows.map(r=>r.map(x=>'"'+csvSafe(x).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='asatuli-vehicle-summary.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}function csvSafe(value){const s=String(value??'');if(typeof value==='number'&&Number.isFinite(value))return s;return /^[\s]*[=+\-@\t\r]/.test(s)?'\''+s:s;}function exportCSV(){const keys=['vehicles','drivers','fuel','maintenance','trips'];let lines=[];for(const k of keys){lines.push('\n'+k);if(!store[k].length){lines.push('لا توجد بيانات');continue;}const cols=Object.keys(store[k][0]);lines.push(cols.map(c=>'\"'+csvSafe(c).replaceAll('\"','\"\"')+'\"').join(','));for(const r of store[k])lines.push(cols.map(c=>'\"'+csvSafe(r[c]).replaceAll('\"','\"\"')+'\"').join(','));}const blob=new Blob(['\ufeff'+lines.join('\n')],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='asatuli-export.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}function exportReport(){const trips=monthFilter(store.trips),fuelRows=monthFilter(store.fuel),maintRows=monthFilter(store.maintenance);const rev=trips.reduce((a,x)=>a+Number(x.revenue||0),0),fuel=fuelRows.reduce((a,x)=>a+Number(x.price||0),0),mnt=maintRows.reduce((a,x)=>a+Number(x.cost||0),0),other=trips.reduce((a,x)=>a+Number(x.other_cost||0),0),km=trips.reduce((a,x)=>a+Number(x.km||0),0);const period=document.getElementById('reportMonth')?.value||'كل الفترة',vehicle=document.getElementById('reportVehicle')?.selectedOptions?.[0]?.text||'كل المركبات';const byVehicle={};store.vehicles.filter(v=>!document.getElementById('reportVehicle')?.value||v.id===document.getElementById('reportVehicle').value).forEach(v=>byVehicle[v.id]={name:v.plate,km:0,rev:0,fuel:0,maint:0,other:0});trips.forEach(x=>{const id=x.vehicle_id||'unknown';if(!byVehicle[id])byVehicle[id]={name:vname(id),km:0,rev:0,fuel:0,maint:0,other:0};byVehicle[id].km+=Number(x.km||0);byVehicle[id].rev+=Number(x.revenue||0);byVehicle[id].other+=Number(x.other_cost||0)});fuelRows.forEach(x=>{const id=x.vehicle_id||'unknown';if(!byVehicle[id])byVehicle[id]={name:vname(id),km:0,rev:0,fuel:0,maint:0,other:0};byVehicle[id].fuel+=Number(x.price||0)});maintRows.forEach(x=>{const id=x.vehicle_id||'unknown';if(!byVehicle[id])byVehicle[id]={name:vname(id),km:0,rev:0,fuel:0,maint:0,other:0};byVehicle[id].maint+=Number(x.cost||0)});const vehicleRows=Object.values(byVehicle).sort((a,b)=>((b.fuel+b.maint+b.other)/(b.km||1))-((a.fuel+a.maint+a.other)/(a.km||1))).map(v=>`<tr><td>${escHTML(v.name)}</td><td>${v.km}</td><td>${money(v.rev)}</td><td>${money(v.fuel)}</td><td>${money(v.maint)}</td><td>${money(v.other)}</td><td>${money(v.km?(v.fuel+v.maint+v.other)/v.km:0)}</td><td>${money(v.rev-v.fuel-v.maint-v.other)}</td></tr>`).join('');const byDriver={};trips.forEach(x=>{const id=x.driver_id||'unknown';if(!byDriver[id])byDriver[id]={name:dname(id),trips:0,km:0,rev:0,other:0};byDriver[id].trips++;byDriver[id].km+=Number(x.km||0);byDriver[id].rev+=Number(x.revenue||0);byDriver[id].other+=Number(x.other_cost||0)});const driverText=Object.values(byDriver).sort((a,b)=>b.rev-a.rev).map(d=>`${escHTML(d.name)}: ${d.trips} رحلة | ${d.km} كم | الإيراد ${money(d.rev)} | مصروف ${money(d.other)} | صافي ${money(d.rev-d.other)}`).join('\n')||'لا توجد رحلات';const txt=`أسطولي Plus — تقرير\nالفترة: ${period}\nالمركبة: ${vehicle}\nعدد الرحلات: ${trips.length}\nالمسافة: ${km} كم\nالإيرادات: ${money(rev)} دينار\nالوقود: ${money(fuel)} دينار\nالصيانة: ${money(mnt)} دينار\nمصاريف أخرى: ${money(other)} دينار\nإجمالي المصروف: ${money(fuel+mnt+other)} دينار\nصافي الفرق: ${money(rev-fuel-mnt-other)} دينار\n\nأداء السائقين\n${driverText}`;const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
