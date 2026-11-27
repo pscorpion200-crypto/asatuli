@@ -362,7 +362,24 @@ function openConnect(){document.getElementById('connectModal').classList.add('op
 function closeConnect(){if(document.body.classList.contains('auth-gate'))return;document.getElementById('connectModal').classList.remove('open')}
 async function connectAndAuth(mode){const status=document.getElementById('connectStatus');if(mode!=='login'){status.textContent='إنشاء الحسابات غير متاح من شاشة الدخول. تواصل مع مسؤول النظام.';return;}try{const url=document.getElementById('sbUrl').value.trim(),key=document.getElementById('sbKey').value.trim(),identifier=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPass').value,company=document.getElementById('companyName').value.trim();let email=identifier.includes('@')?identifier:('driver-'+identifier.replace(/\D/g,'')+'@asatuli.local');if(!url||!key||!identifier||!password)throw Error('أدخل الرابط والمفتاح واسم المستخدم أو البريد وكلمة المرور.');if(mode==='signup'&&!company)throw Error('أدخل اسم الشركة قبل إنشاء الحساب.');if(mode==='signup'&&password.length<6)throw Error('كلمة المرور يجب أن تكون 6 أحرف على الأقل.');localStorage.setItem('asatuli_sb_cfg',JSON.stringify({url,key}));sb=window.supabase.createClient(url,key);let result;if(mode==='signup'){result=await sb.auth.signUp({email,password});if(result.error)throw result.error;if(!result.data.user)throw Error('لم يتم إنشاء المستخدم.');if(!result.data.session){localStorage.setItem('asatuli_pending_company',company);status.textContent='تم إنشاء الحساب. أكّد بريدك الإلكتروني، ثم سجّل الدخول. سنكمل إنشاء الشركة تلقائياً.';return;}await sb.rpc('accept_member_invites');let mem0=await sb.from('members').select('company_id');if(mem0.data?.length){companyId=mem0.data[0].company_id;}else{let rpc=await sb.rpc('create_company',{p_name:company});if(rpc.error)throw rpc.error;companyId=rpc.data;}}else{result=await sb.auth.signInWithPassword({email,password});if(result.error)throw result.error;await sb.rpc('accept_member_invites');let mem=await sb.from('members').select('company_id').order('company_id');if(mem.error)throw mem.error;if(!mem.data.length){let pendingCompany=document.getElementById('companyName').value.trim()||localStorage.getItem('asatuli_pending_company')||'';if(!pendingCompany)throw Error('دخل اسم الشركة لإنشاء الشركة المرتبطة بحسابك.');let rpc=await sb.rpc('create_company',{p_name:pendingCompany});if(rpc.error)throw rpc.error;companyId=rpc.data;localStorage.removeItem('asatuli_pending_company');}else {let ids=[...new Set(mem.data.map(x=>x.company_id))];if(ids.length>1){let choices=await Promise.all(ids.map(async id=>{let c=await sb.from('companies').select('name').eq('id',id).single();return {id,name:c.data?.name||id}}));let promptText='اختر الشركة برقم:\n'+choices.map((c,i)=>(i+1)+'. '+c.name).join('\n');let n=Number(prompt(promptText,'1'));if(!n||n<1||n>choices.length)throw Error('لم يتم اختيار شركة.');companyId=choices[n-1].id;}else companyId=ids[0];}}cloudMode=true;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();await refreshAuditOwnerUI();renderMonthlyReport();status.textContent='تم الاتصال وتحميل بيانات الشركة بنجاح.';render();document.body.classList.remove('auth-gate');closeConnect();await window.initAsatuliDriverPortal?.();window.startAsatuliRealtimeSync?.();alert('تم الاتصال بقاعدة البيانات.');}catch(e){status.textContent=e.message||String(e)}}
 window.connectAndAuth=connectAndAuth;
-async function loadCloud(){if(!sb)return;const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};for(const k of Object.keys(tables)){let q=sb.from(tables[k]).select('*');if(companyId)q=q.eq('company_id',companyId);const {data,error}=await q;if(error)throw error;store[k]=data||[];}}
+async function loadCloud(){
+ if(!sb)return;
+ const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};
+ const pageSize=500;
+ for(const k of Object.keys(tables)){
+  const rows=[];
+  for(let from=0;;from+=pageSize){
+   let q=sb.from(tables[k]).select('*');
+   if(companyId)q=q.eq('company_id',companyId);
+   const {data,error}=await q.order('id',{ascending:true}).range(from,from+pageSize-1);
+   if(error)throw error;
+   const page=data||[];
+   rows.push(...page);
+   if(page.length<pageSize)break;
+  }
+  store[k]=rows;
+ }
+}
 const oldSave=save;save=function(){if(!cloudMode){oldSave();return;}localStorage.setItem('asatuli_demo',JSON.stringify(store));};
 const oldRender=render;render=function(){oldRender();};
 function showFleetToast(message,kind='success'){
