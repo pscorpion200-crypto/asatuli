@@ -39,6 +39,10 @@ const duplicateDriverIndexCleanupMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127182508_remove_duplicate_driver_user_index.sql"),
   "utf8",
 );
+const removedMemberAccessMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127185231_revoke_removed_member_vehicle_and_invoice_access.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 
@@ -267,6 +271,22 @@ assert.ok(
 assert.ok(
   driverRoleMigration.includes("d.id = trips.driver_id"),
   "Drivers must only read their own trip rows",
+);
+
+assert.ok(
+  removedMemberAccessMigration.includes("JOIN public.members AS m"),
+  "Assigned-vehicle access must require current company membership",
+);
+assert.ok(
+  removedMemberAccessMigration.includes("DELETE FROM public.employee_vehicle_assignments") &&
+    removedMemberAccessMigration.includes("UPDATE public.drivers") &&
+    removedMemberAccessMigration.includes("SET user_id = NULL"),
+  "Removing a member must revoke their assignments and detach their driver login",
+);
+assert.ok(
+  removedMemberAccessMigration.includes("CREATE POLICY trip_invoice_read_company") &&
+    removedMemberAccessMigration.includes("m.user_id = (SELECT auth.uid())"),
+  "Trip invoice reads must be restricted to current company members",
 );
 
 assert.ok(policy.includes("CREATE POLICY trip_invoice_upload_assigned_driver"), "Assigned-driver upload policy is missing");
