@@ -18,7 +18,7 @@ class RequestError extends Error {
 
 async function readBoundedJson(req: Request): Promise<Record<string, unknown>> {
   const contentType = req.headers.get("content-type") || "";
-  if (!/^application\\/json(?:\\s*;|$)/i.test(contentType)) {
+  if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
     throw new RequestError("صيغة الطلب غير مدعومة", 415);
   }
 
@@ -144,8 +144,8 @@ Deno.serve(async (req: Request) => {
     const vehicle_id = typeof body.vehicle_id === "string" ? body.vehicle_id : "";
     const company_id = typeof body.company_id === "string" ? body.company_id : "";
 
-    const phoneDigits = phone.replace(/\\D/g, "");
-    const validEmail = email.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+    const phoneDigits = phone.replace(/\D/g, "");
+    const validEmail = email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
     if (
       full_name.length < 2 ||
       full_name.length > 120 ||
@@ -153,7 +153,7 @@ Deno.serve(async (req: Request) => {
       password.length < 8 ||
       password.length > 128 ||
       phone.length > 32 ||
-      !/^\\+?[0-9()\\s-]+$/.test(phone) ||
+      !/^\+?[0-9()\s-]+$/.test(phone) ||
       phoneDigits.length < 8 ||
       phoneDigits.length > 15 ||
       !UUID_RE.test(vehicle_id) ||
