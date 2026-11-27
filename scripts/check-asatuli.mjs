@@ -199,6 +199,16 @@ assert.ok(
     html.includes("table==='trips'&&data.km<=0"),
   "Fleet record forms must reject invalid or negative operational numbers",
 );
+const cloudLoaderStart = html.indexOf("async function loadCloud(){");
+const cloudLoaderEnd = html.indexOf("const oldSave=save", cloudLoaderStart);
+assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud data loader is missing");
+const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);
+assert.ok(
+  cloudLoaderSource.includes(".order('id',{ascending:true})") &&
+    cloudLoaderSource.includes(".range(from,from+pageSize-1)") &&
+    cloudLoaderSource.includes("if(page.length<pageSize)break"),
+  "Cloud data loading must paginate all operational records in stable batches",
+);
 assert.ok(
   !driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'viewer')"),
   "Employee approval must not create a generic viewer instead of a driver",
