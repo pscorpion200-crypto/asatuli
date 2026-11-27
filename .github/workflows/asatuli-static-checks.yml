@@ -3,6 +3,7 @@ name: Asatuli static checks
 on:
   push:
     branches:
+      - main
       - fix/driver-portal-database-linkage
   pull_request:
     branches:
