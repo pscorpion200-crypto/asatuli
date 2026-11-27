@@ -658,7 +658,7 @@ window.createDriverAccount=async function(){const status=document.getElementById
 window.initAsatuliDriverPortal=async function(){let driverMode=false;try{if(!sb||!cloudMode||!companyId)return;const auth=await sb.auth.getUser();const uid=auth.data?.user?.id;if(!uid)return;const roleq=await sb.from('members').select('role').eq('company_id',companyId).eq('user_id',uid).maybeSingle();if(roleq.error||roleq.data?.role!=='driver')return;if(document.getElementById('asatuliDriverPortal'))return;
 // Isolate driver accounts from the owner application.
 driverMode=true;document.body.classList.add('asatuli-driver-mode');
-for(const el of Array.from(document.body.children)){if(el.tagName!=='SCRIPT'&&el.tagName!=='STYLE')el.style.setProperty('display','none','important');}
+for(const el of Array.from(document.body.children)){if(el.tagName!=='SCRIPT'&&el.tagName!=='STYLE'&&el.id!=='asatuliDriverPortal')el.style.setProperty('display','none','important');}
 const {data:assignments,error:assignmentError}=await sb.from('employee_vehicle_assignments').select('vehicle_id').eq('company_id',companyId).eq('user_id',uid);if(assignmentError)throw assignmentError;const assignedIds=[...new Set((assignments||[]).map(x=>x.vehicle_id))];if(!assignedIds.length)throw new Error('لا توجد مركبة مخصصة لهذا الحساب. راجع تخصيص المركبة من لوحة الإدارة.');const {data:vehicle,error:vehicleError}=await sb.from('vehicles').select('id,plate,type').eq('company_id',companyId).in('id',assignedIds).limit(1).maybeSingle();if(vehicleError)throw vehicleError;if(!vehicle)throw new Error('تعذر العثور على المركبة المخصصة لهذا الحساب.');
 const main=document.querySelector('main')||document.getElementById('app')||document.body;const portal=document.createElement('section');portal.id='asatuliDriverPortal';portal.className='card section';portal.style.cssText='max-width:900px;margin:20px auto;padding:18px';portal.innerHTML=`<header class="dp-header"><div class="dp-mark">🚚</div><div class="dp-head-copy"><h1>بوابة السائق</h1><p>مرحباً ${escHTML(auth.data.user.user_metadata?.full_name||auth.data.user.email||'السائق')}</p><span class="dp-vehicle-chip">المركبة: ${escHTML(vehicle.plate||vehicle.type||'المركبة المخصصة')}</span></div></header>
 <section id="dpHome" class="dp-home"><div class="dp-welcome"><strong>أهلاً بك 👋</strong><span>اختر الخدمة التي تريد تسجيلها</span></div><div class="dp-menu-grid">
@@ -1611,6 +1611,10 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{
  body.asatuli-driver-mode #asatuliDriverPortal .dp-module h2{font-size:16px!important;padding:13px!important}
  body.asatuli-driver-mode #asatuliDriverPortal input,body.asatuli-driver-mode #asatuliDriverPortal select{min-height:47px!important;font-size:14px!important}
 }
+</style>
+<style id="asatuli-driver-visibility-fix">
+body.asatuli-driver-mode #asatuliDriverPortal{display:block!important;visibility:visible!important;opacity:1!important;position:relative!important;z-index:99999!important;min-height:60vh!important}
+body.asatuli-driver-mode{overflow-x:hidden!important}
 </style>
 </body>
 </html>
