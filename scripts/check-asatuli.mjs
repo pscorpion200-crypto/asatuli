@@ -392,3 +392,30 @@ console.log(
   "PASS: " + blocks.length +
   " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
 );
+
+const modulePermissionMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127201500_align_fuel_maintenance_trip_rls_with_module_permissions.sql"),
+  "utf8",
+);
+const moduleAccessUi = html.match(/<script id="asatuli-module-access-ui">([\\s\\S]*?)<\\/script>/i)?.[1] ?? "";
+assert.ok(moduleAccessUi, "Module access UI enforcement script is missing");
+assert.ok(
+  moduleAccessUi.includes("member_permissions") &&
+    moduleAccessUi.includes("can(moduleName,'delete')") &&
+    moduleAccessUi.includes("can(moduleName,'add')") &&
+    moduleAccessUi.includes(".eq('company_id',companyId)") &&
+    moduleAccessUi.includes("window.asatuliRouteByMembership"),
+  "Manager/viewer module permissions must be loaded, applied to actions, and company-scoped",
+);
+for (const [table, actions] of [
+  ["fuel", ["view", "add", "edit", "delete"]],
+  ["maintenance", ["view", "add", "edit", "delete"]],
+  ["trips", ["view", "add", "edit", "delete"]],
+]) {
+  for (const action of actions) {
+    assert.ok(
+      modulePermissionMigration.includes("public.has_module_permission(company_id, '" + table + "', '" + action + "')"),
+      "RLS migration must enforce " + action + " permission on " + table,
+    );
+  }
+}
