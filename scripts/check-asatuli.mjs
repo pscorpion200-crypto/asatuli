@@ -31,7 +31,7 @@ const driverApprovalRepair = readFileSync(
   "utf8",
 );
 const driverApprovalMigration = readFileSync(
-  resolve(root, "supabase/migrations/20261127181341_harden_employee_approval_driver_role_and_unique_link.sql"),
+  resolve(root, "supabase/migrations/20261127181416_harden_employee_approval_driver_role_and_unique_link.sql"),
   "utf8",
 );
 
