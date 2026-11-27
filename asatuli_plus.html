@@ -1628,15 +1628,17 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
     if(driverPortal)driverPortal.remove();
     if(driverError)driverError.remove();
     const app=document.querySelector('.app');
-    if(!app)return false;
-    app.style.removeProperty('display');
-    app.style.removeProperty('visibility');
-    app.style.removeProperty('opacity');
     const dash=document.getElementById('dash');
-    if(!dash)return false;
+    if(!app||!dash)return false;
+    app.style.setProperty('display','flex','important');
+    app.style.setProperty('visibility','visible','important');
+    app.style.setProperty('opacity','1','important');
+    app.style.setProperty('position','relative','important');
+    app.style.setProperty('z-index','1','important');
     document.querySelectorAll('.app .view').forEach(view=>{
       view.classList.toggle('active',view.id==='dash');
-      view.style.removeProperty('display');
+      view.style.setProperty('display',view.id==='dash'?'block':'none','important');
+      view.style.setProperty('visibility','visible','important');
     });
     document.querySelectorAll('.sidebar .nav button[data-view]').forEach(button=>{
       button.classList.toggle('active',button.dataset.view==='dash');
@@ -1644,9 +1646,9 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
     const heading=document.getElementById('heading');
     if(heading)heading.textContent='لوحة التحكم';
     const add=document.getElementById('add');
-    if(add)add.style.display='none';
+    if(add)add.style.setProperty('display','none','important');
     const modal=document.getElementById('connectModal');
-    if(modal)modal.classList.remove('open');
+    if(modal){modal.classList.remove('open');modal.style.setProperty('display','none','important');}
     return true;
   }
 
