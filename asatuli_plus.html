@@ -1201,3 +1201,10 @@ body.auth-gate #connectModal:before,#connectModal.open:before{
 #connectModal .login-submit:focus-visible,#connectModal .login-toggle:focus-visible{outline:3px solid #5db6ff;outline-offset:3px}
 @media(max-width:720px){body.auth-gate #connectModal,#connectModal.open{background:radial-gradient(ellipse at 80% 15%,#1597ff30,transparent 40%),linear-gradient(145deg,#06152b,#102d4c 60%,#061326)!important}}
 </style>
+<style id="asatuli-login-force-visible">
+body.auth-gate #connectModal{background:radial-gradient(ellipse at 20% 20%,#244e79 0%,transparent 38%),linear-gradient(135deg,#071629,#123454 55%,#08182b)!important;}
+body.auth-gate #connectModal .modalbox.brand-login,#connectModal.open .modalbox.brand-login{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;width:min(900px,96vw)!important;max-width:900px!important;padding:0!important;overflow:hidden!important;border-radius:28px!important;box-shadow:0 35px 100px #0008!important;}
+#connectModal .login-identity{display:flex!important;flex-direction:column!important;justify-content:center!important;min-height:490px!important;padding:48px!important;color:#fff!important;text-align:right!important;}
+#connectModal .login-panel{padding:48px 42px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;text-align:right!important;}
+@media(max-width:720px){body.auth-gate #connectModal .modalbox.brand-login,#connectModal.open .modalbox.brand-login{grid-template-columns:1fr!important;width:min(480px,96vw)!important;max-width:480px!important;max-height:calc(100dvh - 20px)!important;overflow-y:auto!important;}#connectModal .login-identity{min-height:0!important;padding:28px 24px!important;text-align:center!important;}#connectModal .login-panel{padding:28px 23px!important;text-align:right!important;}}
+</style>
