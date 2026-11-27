@@ -27,6 +27,10 @@ const driverRoleMigration = readFileSync(
   resolve(root, "supabase/migrations/20261126221036_driver_role_and_scoped_portal.sql"),
   "utf8",
 );
+const tripSubmissionIdempotencyMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128210000_trip_submission_idempotency.sql"),
+  "utf8",
+);
 const driverApprovalRepair = readFileSync(
   resolve(root, "supabase/operations/driver_portal_access_repair.sql"),
   "utf8",
@@ -139,6 +143,10 @@ assert.ok(
   "Driver trip and invoice writes must use the server-side upload function",
 );
 assert.ok(saveHandler.includes("new FormData()"), "Driver upload must submit multipart form data");
+assert.ok(saveHandler.includes("submission_id"), "Driver upload must send a stable idempotency key");
+assert.ok(saveHandler.includes("crypto.randomUUID()"), "Driver upload must use a cryptographically random submission key");
+assert.ok(saveHandler.includes("localStorage"), "Pending submission key must survive a page refresh");
+assert.ok(saveHandler.includes("tripSubmitButton.disabled=true"), "Driver trip save must lock while a request is in progress");
 assert.ok(saveHandler.includes("files.length>5"), "Client-side five-file limit is missing");
 assert.ok(saveHandler.includes("8*1024*1024"), "Client-side invoice size guard is missing");
 assert.ok(
@@ -162,6 +170,15 @@ assert.ok(
 );
 assert.ok(uploadFunction.includes('.from("trips").insert'), "Trip insert must run with the authenticated user and RLS");
 assert.ok(uploadFunction.includes("cleanupUploads"), "Failed trip saves must clean up uploaded files");
+assert.ok(uploadFunction.includes('requiredText(form, "submission_id", 36)'), "Server must require a valid client submission id");
+assert.ok(uploadFunction.includes('.eq("submission_id", submissionId)'), "Server must return the previously saved trip for a retried submission");
+assert.ok(uploadFunction.includes('tripError.code === "23505"'), "Server must recover safely from concurrent duplicate submissions");
+assert.ok(
+  tripSubmissionIdempotencyMigration.includes("ADD COLUMN IF NOT EXISTS submission_id uuid") &&
+    tripSubmissionIdempotencyMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS trips_company_driver_submission_unique") &&
+    tripSubmissionIdempotencyMigration.includes("WHERE submission_id IS NOT NULL"),
+  "Trip submission ids must have a nullable, company/driver-scoped unique index",
+);
 
 assert.equal(MAX_INVOICE_SIZE, 8 * 1024 * 1024, "Server invoice file limit must remain 8 MiB");
 assert.equal(MAX_INVOICE_COUNT, 5, "Server invoice count limit must remain five");
