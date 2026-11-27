@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import assert from "node:assert/strict";
@@ -40,6 +41,56 @@ const duplicateDriverIndexCleanupMigration = readFileSync(
 );
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+
+const nonEmptyScriptBodies = blocks.map((match) => match[1].trim()).filter(Boolean);
+assert.equal(
+  new Set(nonEmptyScriptBodies).size,
+  nonEmptyScriptBodies.length,
+  "The active HTML page must not contain byte-for-byte duplicate inline scripts",
+);
+assert.equal(
+  blocks.filter((match) => match[1].includes("window.createDriverAccount=async function")).length,
+  1,
+  "Only one active driver-account creation handler may be registered",
+);
+
+const markupForIds = html
+  .replace(/(<script\\b[^>]*>)[\\s\\S]*?<\\/script>/gi, "$1</script>")
+  .replace(/(<style\\b[^>]*>)[\\s\\S]*?<\\/style>/gi, "$1</style>");
+const htmlIds = [...markupForIds.matchAll(/\\bid=["']([^"']+)["']/gi)].map((match) => match[1]);
+const duplicateHtmlIds = htmlIds.filter((id, index) => htmlIds.indexOf(id) !== index);
+assert.deepEqual([...new Set(duplicateHtmlIds)], [], "Active HTML markup must not contain duplicate element IDs");
+
+const styleBodies = [...html.matchAll(/<style\\b[^>]*>([\\s\\S]*?)<\\/style>/gi)]
+  .map((match) => match[1].trim())
+  .filter(Boolean);
+assert.equal(new Set(styleBodies).size, styleBodies.length, "The page must not contain duplicate style blocks");
+
+// Scan source files for exact duplicate copies (for example, accidentally saved .html.html backups).
+const sourceExtensions = new Set([".html", ".htm", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".sql"]);
+const ignoredDirectories = new Set([".git", "node_modules", ".next", "dist", "_site"]);
+function collectSourceFiles(directory) {
+  const collected = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (!ignoredDirectories.has(entry.name)) collected.push(...collectSourceFiles(resolve(directory, entry.name)));
+    } else if (entry.isFile()) {
+      const dot = entry.name.lastIndexOf(".");
+      const extension = dot >= 0 ? entry.name.slice(dot) : "";
+      if (sourceExtensions.has(extension)) collected.push(resolve(directory, entry.name));
+    }
+  }
+  return collected;
+}
+const sourceHashes = new Map();
+for (const sourcePath of collectSourceFiles(root)) {
+  const hash = createHash("sha256").update(readFileSync(sourcePath)).digest("hex");
+  const paths = sourceHashes.get(hash) ?? [];
+  paths.push(sourcePath.slice(root.length + 1));
+  sourceHashes.set(hash, paths);
+}
+const duplicatedSourceFiles = [...sourceHashes.values()].filter((paths) => paths.length > 1);
+assert.deepEqual(duplicatedSourceFiles, [], "Repository must not contain byte-for-byte duplicate source files");
 assert.ok(blocks.length > 0, "No script blocks were found");
 
 for (let index = 0; index < blocks.length; index += 1) {
