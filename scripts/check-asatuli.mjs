@@ -388,10 +388,7 @@ assert.ok(
   "Membership routing must resolve the signed-in user's current company and role",
 );
 
-console.log(
-  "PASS: " + blocks.length +
-  " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
-);
+
 
 const modulePermissionMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127191510_align_fuel_maintenance_trip_rls_with_module_permissions.sql"),
@@ -419,3 +416,24 @@ for (const [table, actions] of [
     );
   }
 }
+
+const tripDriverReadMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127192533_restrict_trip_reads_to_linked_driver_or_module_permission.sql"),
+  "utf8",
+);
+const tripReadPolicy = tripDriverReadMigration.slice(
+  tripDriverReadMigration.indexOf("create policy module_read"),
+);
+assert.ok(
+  tripReadPolicy.includes("m.role = 'driver'") &&
+    tripReadPolicy.includes("d.user_id = (select auth.uid())") &&
+    tripReadPolicy.includes("d.id = trips.driver_id") &&
+    tripReadPolicy.includes("public.employee_assigned_vehicle(company_id, vehicle_id)") &&
+    tripReadPolicy.includes("public.has_module_permission(company_id, 'trips', 'view')"),
+  "Trip read access must be limited to the linked driver, company owner, or explicitly permitted module viewer",
+);
+
+console.log(
+  "PASS: " + blocks.length +
+  " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
+);
