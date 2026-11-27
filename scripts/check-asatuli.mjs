@@ -258,6 +258,34 @@ const monthlyReportStart = html.indexOf("function renderMonthlyReport(){");
 const monthlyReportEnd = html.indexOf("function exportDriverReportCSV", monthlyReportStart);
 assert.ok(monthlyReportStart >= 0 && monthlyReportEnd > monthlyReportStart, "Monthly report function is missing");
 const monthlyReportSource = html.slice(monthlyReportStart, monthlyReportEnd);
+const driverHistoryStart = html.indexOf("async function driverHistory(id)");
+const driverHistoryEnd = html.indexOf("function printSingleDriverHistory(id)", driverHistoryStart);
+const driverHistorySource = html.slice(driverHistoryStart, driverHistoryEnd);
+assert.ok(
+  driverHistoryStart >= 0 && driverHistoryEnd > driverHistoryStart &&
+    driverHistorySource.includes("loadedMeters=trips.reduce") &&
+    driverHistorySource.includes("الأمتار المحمّلة") &&
+    driverHistorySource.includes("x.loaded_meters"),
+  "Individual driver history must total and show loaded meters per trip",
+);
+const driverPrintStart = html.indexOf("function printSingleDriverHistory(id)");
+const driverPrintEnd = html.indexOf("function exportSingleDriverCSV(id)", driverPrintStart);
+const driverPrintSource = html.slice(driverPrintStart, driverPrintEnd);
+assert.ok(
+  driverPrintSource.includes("loadedMeters=trips.reduce") &&
+    driverPrintSource.includes("x.loaded_meters") &&
+    driverPrintSource.includes("الأمتار المحمّلة"),
+  "Printable individual driver statement must include loaded meters in its summary and rows",
+);
+const driverCsvStart = html.indexOf("function exportSingleDriverCSV(id)");
+const driverCsvEnd = html.indexOf("async function openMembers()", driverCsvStart);
+const driverCsvSource = html.slice(driverCsvStart, driverCsvEnd);
+assert.ok(
+  driverCsvSource.includes("الأمتار المحمّلة") &&
+    driverCsvSource.includes("Number(x.loaded_meters||0)"),
+  "Individual driver CSV export must include loaded meters",
+);
+
 assert.ok(
   monthlyReportSource.includes("const vehicleRows=") &&
     monthlyReportSource.includes("${vehicleRows||") &&
