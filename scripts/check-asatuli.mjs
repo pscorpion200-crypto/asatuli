@@ -26,6 +26,10 @@ const driverRoleMigration = readFileSync(
   resolve(root, "supabase/migrations/20261126221036_driver_role_and_scoped_portal.sql"),
   "utf8",
 );
+const driverApprovalRepair = readFileSync(
+  resolve(root, "supabase/operations/driver_portal_access_repair.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 assert.ok(blocks.length > 0, "No script blocks were found");
@@ -139,6 +143,26 @@ assert.ok(
 assert.ok(
   driverRoleMigration.includes("m.role = 'driver'"),
   "Trip invoice storage uploads must require the dedicated driver role",
+);
+assert.ok(
+  driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'driver')"),
+  "Approved employee join requests must receive the dedicated driver role",
+);
+assert.ok(
+  driverApprovalRepair.includes("DO UPDATE SET role = 'driver'"),
+  "Re-approved viewer accounts must be converted to dedicated drivers",
+);
+assert.ok(
+  driverApprovalRepair.includes("role IN ('owner', 'manager')"),
+  "Employee approval must never downgrade an owner or manager to a driver",
+);
+assert.ok(
+  driverApprovalRepair.includes("drivers_company_user_id_unique"),
+  "Linked driver identity uniqueness must remain enforced",
+);
+assert.ok(
+  !driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'viewer')"),
+  "Employee approval must not create a generic viewer instead of a driver",
 );
 assert.ok(
   driverRoleMigration.includes("d.id = trips.driver_id"),
