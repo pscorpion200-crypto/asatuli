@@ -1135,8 +1135,7 @@ function draw(){const list=rows(),box=document.getElementById('fleetExpiryRows')
 draw();document.getElementById('fleetExpiryExport').onclick=()=>{const list=rows(),data=[['المركبة/السائق','الوثيقة','التاريخ','الأيام المتبقية'],...list.map(x=>[x.subject,x.type,x.date,x.days])];const csv='\ufeff'+data.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='asatuli-expiry-report.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 }catch(e){console.warn('Expiry report module',e)}})();
 
-// Require authentication before exposing the fleet app.
-(async()=>{try{await resumeCloudSession();}catch(e){}if(!cloudMode){openConnect();document.body.classList.add('auth-gate');}})();
+// Session restoration is handled once by #asatuli-session-bootstrap at the end of this file.
 </script>
 <style>
 /* polished sign-in experience */
@@ -1809,14 +1808,25 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
 
 <script id="asatuli-session-bootstrap">
 (function(){
+  if(window.__asatuliSessionBootstrapStarted)return;
+  window.__asatuliSessionBootstrapStarted=true;
+
   async function restoreSavedSession(){
+    document.body.classList.add('auth-gate');
     try{
-      if(typeof window.resumeCloudSession!=='function')return;
-      await window.resumeCloudSession();
+      if(typeof window.resumeCloudSession==='function'){
+        await window.resumeCloudSession();
+      }
     }catch(error){
       console.warn('Asatuli saved-session restore failed',error);
     }
+
+    if(!cloudMode){
+      if(typeof openConnect==='function')openConnect();
+      document.body.classList.add('auth-gate');
+    }
   }
+
   if(document.readyState==='loading'){
     document.addEventListener('DOMContentLoaded',restoreSavedSession,{once:true});
   }else{
