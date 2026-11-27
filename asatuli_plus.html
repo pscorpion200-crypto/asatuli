@@ -1617,6 +1617,91 @@ body.asatuli-driver-mode #asatuliDriverPortal{display:block!important;visibility
 body.asatuli-driver-mode{overflow-x:hidden!important}
 </style>
 <!-- Manager dashboard polish CSS disabled to restore view navigation -->
+
+<script id="asatuli-manager-route-recovery">
+(function(){
+  function showManagerDashboard(){
+    const body=document.body;
+    body.classList.remove('auth-gate','asatuli-driver-mode');
+    const driverPortal=document.getElementById('asatuliDriverPortal');
+    const driverError=document.getElementById('asatuliDriverPortalError');
+    if(driverPortal)driverPortal.remove();
+    if(driverError)driverError.remove();
+    const app=document.querySelector('.app');
+    if(!app)return false;
+    app.style.removeProperty('display');
+    app.style.removeProperty('visibility');
+    app.style.removeProperty('opacity');
+    const dash=document.getElementById('dash');
+    if(!dash)return false;
+    document.querySelectorAll('.app .view').forEach(view=>{
+      view.classList.toggle('active',view.id==='dash');
+      view.style.removeProperty('display');
+    });
+    document.querySelectorAll('.sidebar .nav button[data-view]').forEach(button=>{
+      button.classList.toggle('active',button.dataset.view==='dash');
+    });
+    const heading=document.getElementById('heading');
+    if(heading)heading.textContent='لوحة التحكم';
+    const add=document.getElementById('add');
+    if(add)add.style.display='none';
+    const modal=document.getElementById('connectModal');
+    if(modal)modal.classList.remove('open');
+    return true;
+  }
+
+  async function routeByMembership(){
+    if(!window.sb||!window.cloudMode||!window.companyId)return;
+    const auth=await window.sb.auth.getUser();
+    const user=auth.data&&auth.data.user;
+    if(!user)return;
+    const result=await window.sb.from('members').select('role')
+      .eq('company_id',window.companyId).eq('user_id',user.id).maybeSingle();
+    if(result.error)throw result.error;
+    const role=result.data&&result.data.role;
+    if(role==='owner'||role==='manager'||role==='viewer'){
+      if(!showManagerDashboard())throw new Error('تعذر العثور على لوحة تحكم المدير داخل الصفحة.');
+      document.body.dataset.asatuliPage='manager';
+    }else if(role==='driver'){
+      document.body.dataset.asatuliPage='driver';
+      if(typeof window.initAsatuliDriverPortal==='function'&&!document.getElementById('asatuliDriverPortal')){
+        await window.initAsatuliDriverPortal();
+      }
+    }else{
+      throw new Error('حسابك غير مربوط بدور داخل هذه الشركة. راجع صلاحيات العضوية.');
+    }
+  }
+
+  const originalConnect=window.connectAndAuth;
+  if(typeof originalConnect==='function'){
+    window.connectAndAuth=async function(mode){
+      await originalConnect(mode);
+      if(!document.body.classList.contains('auth-gate')&&window.cloudMode){
+        try{await routeByMembership();}
+        catch(error){
+          const status=document.getElementById('connectStatus');
+          if(status)status.textContent='تم تسجيل الدخول لكن تعذر فتح الصفحة: '+(error.message||error);
+          console.error('Asatuli role routing failed',error);
+        }
+      }
+    };
+  }
+
+  const originalResume=window.resumeCloudSession;
+  if(typeof originalResume==='function'){
+    window.resumeCloudSession=async function(){
+      await originalResume();
+      if(!document.body.classList.contains('auth-gate')&&window.cloudMode){
+        try{await routeByMembership();}
+        catch(error){console.error('Asatuli session route failed',error);}
+      }
+    };
+  }
+
+  window.asatuliShowManagerDashboard=showManagerDashboard;
+})();
+</script>
+
 </body>
 </html>
 
