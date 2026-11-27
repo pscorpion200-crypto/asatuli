@@ -397,7 +397,7 @@ const modulePermissionMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127201500_align_fuel_maintenance_trip_rls_with_module_permissions.sql"),
   "utf8",
 );
-const moduleAccessUi = html.match(/<script id="asatuli-module-access-ui">([\\s\\S]*?)<\\/script>/i)?.[1] ?? "";
+const moduleAccessUi = html.match(/<script id="asatuli-module-access-ui">([\s\S]*?)<\/script>/i)?.[1] ?? "";
 assert.ok(moduleAccessUi, "Module access UI enforcement script is missing");
 assert.ok(
   moduleAccessUi.includes("member_permissions") &&
