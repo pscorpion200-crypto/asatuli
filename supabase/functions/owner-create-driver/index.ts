@@ -6,6 +6,65 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const MAX_REQUEST_SIZE = 16 * 1024;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+class RequestError extends Error {
+  constructor(message: string, readonly status: number = 400) {
+    super(message);
+    this.name = "RequestError";
+  }
+}
+
+async function readBoundedJson(req: Request): Promise<Record<string, unknown>> {
+  const contentType = req.headers.get("content-type") || "";
+  if (!/^application\\/json(?:\\s*;|$)/i.test(contentType)) {
+    throw new RequestError("صيغة الطلب غير مدعومة", 415);
+  }
+
+  const declaredLength = Number(req.headers.get("content-length") || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_SIZE) {
+    throw new RequestError("حجم الطلب أكبر من الحد المسموح", 413);
+  }
+  if (!req.body) throw new RequestError("بيانات الطلب فارغة");
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_REQUEST_SIZE) {
+        await reader.cancel();
+        throw new RequestError("حجم الطلب أكبر من الحد المسموح", 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new RequestError("بيانات الطلب غير صالحة");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new RequestError("بيانات الطلب غير صالحة");
+  }
+  return parsed as Record<string, unknown>;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -77,7 +136,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const body = await req.json();
+    const body = await readBoundedJson(req);
     const full_name = typeof body.full_name === "string" ? body.full_name.trim() : "";
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
@@ -85,8 +144,22 @@ Deno.serve(async (req: Request) => {
     const vehicle_id = typeof body.vehicle_id === "string" ? body.vehicle_id : "";
     const company_id = typeof body.company_id === "string" ? body.company_id : "";
 
-    if (!full_name || !email || password.length < 8 || !vehicle_id || !company_id) {
-      throw new Error("أكمل الاسم والبريد وكلمة مرور من 8 أحرف والسيارة");
+    const phoneDigits = phone.replace(/\\D/g, "");
+    const validEmail = email.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);
+    if (
+      full_name.length < 2 ||
+      full_name.length > 120 ||
+      !validEmail ||
+      password.length < 8 ||
+      password.length > 128 ||
+      phone.length > 32 ||
+      !/^\\+?[0-9()\\s-]+$/.test(phone) ||
+      phoneDigits.length < 8 ||
+      phoneDigits.length > 15 ||
+      !UUID_RE.test(vehicle_id) ||
+      !UUID_RE.test(company_id)
+    ) {
+      throw new RequestError("تحقق من الاسم والبريد والهاتف وكلمة المرور والسيارة");
     }
 
     const owner = await userClient.rpc("is_company_owner", {
@@ -198,7 +271,7 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({
       error: error instanceof Error ? error.message : String(error),
     }), {
-      status: 400,
+      status: error instanceof RequestError ? error.status : 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
