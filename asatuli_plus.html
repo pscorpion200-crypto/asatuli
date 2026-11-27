@@ -470,7 +470,7 @@ function exportDriverReportCSV(){
  trips.forEach(x=>{const id=x.driver_id||'unknown';if(!byDriver[id])byDriver[id]={name:dname(id),trips:0,km:0,loaded:0,rev:0,other:0};byDriver[id].trips++;byDriver[id].km+=Number(x.km||0);byDriver[id].loaded+=Number(x.loaded_meters||0);byDriver[id].rev+=Number(x.revenue||0);byDriver[id].other+=Number(x.other_cost||0)});
  const rows=[['السائق','عدد الرحلات','المسافة كم','الأمتار المحملة','الإيرادات','المصاريف الأخرى','الصافي']];
  Object.values(byDriver).sort((a,b)=>b.rev-a.rev).forEach(d=>rows.push([d.name,d.trips,d.km,d.loaded,money(d.rev),money(d.other),money(d.rev-d.other)]));
- const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replaceAll('"','""')+'"').join(',')).join('\\n');
+ const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replaceAll('"','""')+'"').join(',')).join('\n');
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-driver-performance.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function printReport(){renderMonthlyReport();window.print();}
