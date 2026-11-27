@@ -151,10 +151,11 @@ Deno.serve(async (req: Request) => {
     const revenue = numericField(form, "revenue", true);
     const otherCost = numericField(form, "other_cost", true);
     const loadedMeters = numericField(form, "loaded_meters", true);
+    const submissionId = requiredText(form, "submission_id", 36);
     const notesValue = form.get("notes");
     const notes = typeof notesValue === "string" ? notesValue.trim() : "";
     if (notes.length > 2000) throw new HttpError(400, "الملاحظات أطول من الحد المسموح");
-    if (!UUID_RE.test(companyId) || !UUID_RE.test(vehicleId) || !validDate(day)) {
+    if (!UUID_RE.test(companyId) || !UUID_RE.test(vehicleId) || !UUID_RE.test(submissionId) || !validDate(day)) {
       throw new HttpError(400, "معرّف الشركة أو المركبة أو التاريخ غير صحيح");
     }
 
@@ -215,6 +216,26 @@ Deno.serve(async (req: Request) => {
       throw new HttpError(403, "هذه المركبة غير مخصصة لحساب السائق");
     }
 
+    // Return the first successful result when the same client submission is retried.
+    const { data: existingTrip, error: existingTripError } = await admin
+      .from("trips")
+      .select("id, attachments")
+      .eq("company_id", companyId)
+      .eq("driver_id", driverId)
+      .eq("submission_id", submissionId)
+      .maybeSingle();
+    if (existingTripError) {
+      throw new HttpError(500, "تعذر التحقق من حالة إرسال الرحلة");
+    }
+    if (existingTrip) {
+      return jsonResponse({
+        ok: true,
+        trip_id: existingTrip.id,
+        attachment_count: Array.isArray(existingTrip.attachments) ? existingTrip.attachments.length : 0,
+        duplicate: true,
+      });
+    }
+
     const tripId = crypto.randomUUID();
     for (let index = 0; index < files.length; index += 1) {
       const bytes = new Uint8Array(await files[index].arrayBuffer());
@@ -243,6 +264,7 @@ Deno.serve(async (req: Request) => {
 
     const { error: tripError } = await userClient.from("trips").insert({
       id: tripId,
+      submission_id: submissionId,
       company_id: companyId,
       vehicle_id: vehicleId,
       driver_id: driverId,
@@ -256,6 +278,28 @@ Deno.serve(async (req: Request) => {
       attachments: uploadedPaths,
     });
     if (tripError) {
+      // A concurrent retry may pass the pre-check; the unique index is the final guard.
+      if (tripError.code === "23505") {
+        const { data: duplicateTrip, error: duplicateLookupError } = await admin
+          .from("trips")
+          .select("id, attachments")
+          .eq("company_id", companyId)
+          .eq("driver_id", driverId)
+          .eq("submission_id", submissionId)
+          .maybeSingle();
+
+        if (!duplicateLookupError && duplicateTrip) {
+          await cleanupUploads(admin, uploadedPaths);
+          uploadedPaths.length = 0;
+          return jsonResponse({
+            ok: true,
+            trip_id: duplicateTrip.id,
+            attachment_count: Array.isArray(duplicateTrip.attachments) ? duplicateTrip.attachments.length : 0,
+            duplicate: true,
+          });
+        }
+      }
+
       console.error("Driver trip insert rejected", tripError);
       throw new HttpError(
         tripError.code === "42501" ? 403 : 500,
