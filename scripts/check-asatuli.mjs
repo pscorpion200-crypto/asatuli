@@ -394,7 +394,7 @@ console.log(
 );
 
 const modulePermissionMigration = readFileSync(
-  resolve(root, "supabase/migrations/20261127201500_align_fuel_maintenance_trip_rls_with_module_permissions.sql"),
+  resolve(root, "supabase/migrations/20261127191510_align_fuel_maintenance_trip_rls_with_module_permissions.sql"),
   "utf8",
 );
 const moduleAccessUi = html.match(/<script id="asatuli-module-access-ui">([\s\S]*?)<\/script>/i)?.[1] ?? "";
