@@ -153,6 +153,10 @@ assert.ok(
   "Re-approved viewer accounts must be converted to dedicated drivers",
 );
 assert.ok(
+  driverApprovalRepair.includes("DELETE FROM public.member_permissions"),
+  "Approved drivers must not keep stale manager/viewer module grants",
+);
+assert.ok(
   driverApprovalRepair.includes("role IN ('owner', 'manager')"),
   "Employee approval must never downgrade an owner or manager to a driver",
 );
