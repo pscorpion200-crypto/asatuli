@@ -433,6 +433,30 @@ assert.ok(
   "Trip read access must be limited to the linked driver, company owner, or explicitly permitted module viewer",
 );
 
+const securityDefinerPathMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261127193021_harden_security_definer_function_search_paths.sql"),
+  "utf8",
+);
+const privilegedFunctions = [
+  "accept_member_invites()",
+  "create_company(text)",
+  "employee_assigned_vehicle(uuid, uuid)",
+  "has_module_permission(uuid, text, text)",
+  "is_company_owner(uuid)",
+  "my_companies()",
+  "owner_invite_member(uuid, text, text)",
+  "owner_remove_member(uuid, uuid)",
+  "owner_set_member_permissions(uuid, uuid, jsonb)",
+];
+for (const signature of privilegedFunctions) {
+  assert.ok(
+    securityDefinerPathMigration.includes(
+      "ALTER FUNCTION public." + signature + "\\n  SET search_path = pg_catalog, public, pg_temp;",
+    ),
+    "SECURITY DEFINER function must put pg_catalog first and pg_temp last: " + signature,
+  );
+}
+
 console.log(
   "PASS: " + blocks.length +
   " JavaScript blocks compile; server authentication, assignment checks, bounded uploads, file signatures, cleanup and storage policy checks passed.",
