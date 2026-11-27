@@ -1,0 +1,8 @@
+# Edge Functions in this project are invoked only by signed-in app users.
+# The handlers also validate the user session, role, company, and resource ownership.
+
+[functions.owner-create-driver]
+verify_jwt = true
+
+[functions.driver-save-trip-with-invoices]
+verify_jwt = true
