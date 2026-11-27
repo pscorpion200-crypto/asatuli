@@ -1651,7 +1651,7 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
   }
 
   async function routeByMembership(){
-    if(!window.sb||!window.cloudMode||!window.companyId)return;
+    if(!sb||!cloudMode||!companyId)return;
     const auth=await sb.auth.getUser();
     const user=auth.data&&auth.data.user;
     if(!user)return;
@@ -1691,7 +1691,7 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
   if(typeof originalResume==='function'){
     window.resumeCloudSession=async function(){
       await originalResume();
-      if(!document.body.classList.contains('auth-gate')&&window.cloudMode){
+      if(!document.body.classList.contains('auth-gate')&&cloudMode){
         try{await routeByMembership();}
         catch(error){console.error('Asatuli session route failed',error);}
       }
