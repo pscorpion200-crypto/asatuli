@@ -522,7 +522,247 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
   </style></head><body><h1>أسطولي Plus</h1><h2>تقرير المركبة: ${escHTML(v.plate||"—")}</h2>
   <p>نوع المركبة: ${escHTML(v.type||"—")} | الحالة: ${escHTML(v.status||"نشطة")}</p>
   <div class="summary">الإيرادات: ${money(revenue)} | الوقود: ${money(fuelCost)} (${liters} لتر) | الصيانة: ${money(maintCost)} | مصاريف الرحلات: ${money(other)} | الكيلومترات: ${km} | الصافي: ${money(revenue-fuelCost-maintCost-other)}</div>
-  <table><thead><tr><th>التاريخ</th><th>نوع السجل</th><th>التفاصيل</th><th>المصروف</th><th>الإيراد</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  <table><thead><tr><th>التاريخ</th><th>نوع السجل</th><th>التفاصيل</th><th>المصروف</th><th>الإيراد</th></tr></thead><tbody>${rows}</tbody></table><script id="asatuli-module-access-ui">
+(function(){
+  const MODULES=['vehicles','drivers','fuel','maintenance','trips'];
+  const TABLE_BODIES={vehicles:'vehicleRows',drivers:'driverRows',fuel:'fuelRows',maintenance:'maintRows',trips:'tripRows'};
+  let access={role:'pending',rights:Object.create(null)};
+
+  function can(moduleName,action){
+    if(!cloudMode)return true;
+    if(access.role==='owner')return true;
+    if(!MODULES.includes(moduleName))return false;
+    return access.rights[moduleName+':'+action]===true;
+  }
+  function canSeeReports(){
+    return !cloudMode||access.role==='owner'||MODULES.some(name=>can(name,'view'));
+  }
+  function toast(message){
+    if(typeof window.showFleetToast==='function')window.showFleetToast(message,'warning');
+    else console.warn(message);
+  }
+  function activeModule(){
+    const active=document.querySelector('.app .view.active');
+    return active&&MODULES.includes(active.id)?active.id:null;
+  }
+
+  function applyUI(){
+    if(!cloudMode||document.body.classList.contains('asatuli-driver-mode'))return;
+
+    document.querySelectorAll('.sidebar .nav button[data-view]').forEach(button=>{
+      const target=button.dataset.view;
+      const allowed=target==='dash'||(MODULES.includes(target)&&can(target,'view'))||(target==='reports'&&canSeeReports());
+      button.style.display=allowed?'':'none';
+      if(!allowed)button.classList.remove('active');
+    });
+
+    const active=document.querySelector('.app .view.active');
+    if(active&&((MODULES.includes(active.id)&&!can(active.id,'view'))||(active.id==='reports'&&!canSeeReports()))){
+      document.querySelectorAll('.app .view').forEach(view=>{
+        view.classList.toggle('active',view.id==='dash');
+        view.style.setProperty('display',view.id==='dash'?'block':'none','important');
+      });
+      document.querySelectorAll('.sidebar .nav button[data-view]').forEach(button=>{
+        button.classList.toggle('active',button.dataset.view==='dash');
+      });
+      const heading=document.getElementById('heading');
+      if(heading)heading.textContent='لوحة التحكم';
+    }
+
+    MODULES.forEach(moduleName=>{
+      const view=document.getElementById(moduleName);
+      const allowed=can(moduleName,'view');
+      if(view)view.style.setProperty('display',allowed?(view.classList.contains('active')?'block':'none'):'none','important');
+
+      if(view){
+        view.querySelectorAll('button[onclick]').forEach(button=>{
+          const action=button.getAttribute('onclick')||'';
+          if(action.includes("openModal('"+moduleName+"'")){
+            button.style.display=can(moduleName,'add')?'':'none';
+          }
+        });
+      }
+
+      const body=document.getElementById(TABLE_BODIES[moduleName]);
+      if(body){
+        body.querySelectorAll('button[onclick]').forEach(button=>{
+          const action=button.getAttribute('onclick')||'';
+          if(action.includes('editRecord('))button.style.display=can(moduleName,'edit')?'':'none';
+          else if(action.includes('del('))button.style.display=can(moduleName,'delete')?'':'none';
+          else button.style.display=can(moduleName,'view')?'':'none';
+        });
+      }
+    });
+
+    const reports=document.getElementById('reports');
+    if(reports)reports.style.setProperty('display',canSeeReports()?(reports.classList.contains('active')?'block':'none'):'none','important');
+
+    const add=document.getElementById('add');
+    const moduleName=activeModule();
+    if(add)add.style.display=moduleName&&can(moduleName,'add')?'':'none';
+
+    const membersButton=document.querySelector('.sidebar button[onclick*="openMembers"]');
+    if(membersButton)membersButton.style.display=access.role==='owner'?'':'none';
+    const auditButton=document.getElementById('auditLogBtn');
+    if(auditButton&&access.role!=='owner')auditButton.style.display='none';
+  }
+
+  async function refreshAccess(){
+    if(!sb||!cloudMode||!companyId){
+      access={role:null,rights:Object.create(null)};
+      applyUI();
+      return false;
+    }
+    try{
+      const auth=await sb.auth.getUser();
+      if(auth.error)throw auth.error;
+      const user=auth.data&&auth.data.user;
+      if(!user)throw new Error('تعذر التحقق من هوية المستخدم.');
+
+      const membership=await sb.from('members').select('role')
+        .eq('company_id',companyId).eq('user_id',user.id).maybeSingle();
+      if(membership.error)throw membership.error;
+      if(!membership.data)throw new Error('لا توجد عضوية فعالة لهذه الشركة.');
+
+      const rights=Object.create(null);
+      MODULES.forEach(name=>['view','add','edit','delete'].forEach(action=>rights[name+':'+action]=false));
+      if(membership.data.role==='owner'){
+        MODULES.forEach(name=>['view','add','edit','delete'].forEach(action=>rights[name+':'+action]=true));
+      }else if(['manager','viewer'].includes(membership.data.role)){
+        const result=await sb.from('member_permissions')
+          .select('module_name,can_view,can_add,can_edit,can_delete')
+          .eq('company_id',companyId).eq('user_id',user.id);
+        if(result.error)throw result.error;
+        (result.data||[]).forEach(row=>{
+          if(!MODULES.includes(row.module_name))return;
+          rights[row.module_name+':view']=row.can_view===true;
+          rights[row.module_name+':add']=row.can_add===true;
+          rights[row.module_name+':edit']=row.can_edit===true;
+          rights[row.module_name+':delete']=row.can_delete===true;
+        });
+      }
+      access={role:membership.data.role,rights};
+      applyUI();
+      return true;
+    }catch(error){
+      access={role:'unverified',rights:Object.create(null)};
+      applyUI();
+      console.error('Asatuli module permissions could not be verified',error);
+      toast('تعذر التحقق من صلاحيات الحساب؛ تم إيقاف أزرار التعديل والإضافة مؤقتاً.');
+      return false;
+    }
+  }
+
+  window.asatuliCanModule=can;
+  window.asatuliRefreshModuleAccess=refreshAccess;
+
+  const originalOpenModal=window.openModal;
+  if(typeof originalOpenModal==='function'){
+    window.openModal=function(moduleName,record=null){
+      const action=record?'edit':'add';
+      if(!can(moduleName,action)){toast('ليست لديك صلاحية '+(action==='add'?'الإضافة':'التعديل')+' في هذا القسم.');return;}
+      return originalOpenModal.apply(this,arguments);
+    };
+  }
+
+  window.del=async function(moduleName,id){
+    if(!can(moduleName,'delete')){toast('ليست لديك صلاحية حذف السجلات من هذا القسم.');return;}
+    if(!confirm('حذف هذا السجل؟'))return;
+    try{
+      if(cloudMode){
+        if(!sb||!companyId)throw new Error('اتصال قاعدة البيانات غير جاهز.');
+        const result=await sb.from(moduleName).delete()
+          .eq('id',id).eq('company_id',companyId).select('id');
+        if(result.error)throw result.error;
+        if(!result.data||!result.data.length)throw new Error('لم يتم تأكيد الحذف. قد لا تملك الصلاحية أو أن السجل غير موجود.');
+        await loadCloud();
+      }else{
+        store[moduleName]=store[moduleName].filter(row=>row.id!==id);
+      }
+      render();
+      if(typeof renderMonthlyReport==='function')renderMonthlyReport();
+      if(typeof window.showFleetToast==='function')window.showFleetToast('تم حذف السجل بنجاح.');
+    }catch(error){
+      toast('تعذر الحذف: '+(error.message||String(error)));
+    }
+  };
+
+  const form=document.getElementById('recordForm');
+  if(form)form.addEventListener('submit',event=>{
+    if(cloudMode&&!can(currentType,editingId?'edit':'add')){
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toast('لا تملك صلاحية تنفيذ هذه العملية في هذا القسم.');
+    }
+  },true);
+
+  const originalRender=window.render;
+  if(typeof originalRender==='function'){
+    window.render=function(){
+      const result=originalRender.apply(this,arguments);
+      applyUI();
+      return result;
+    };
+  }
+
+  const originalLoadCloud=window.loadCloud;
+  if(typeof originalLoadCloud==='function'){
+    window.loadCloud=async function(){
+      const result=await originalLoadCloud.apply(this,arguments);
+      if(cloudMode)await refreshAccess();
+      return result;
+    };
+  }
+
+  const originalRoute=window.asatuliRouteByMembership;
+  if(typeof originalRoute==='function'){
+    window.asatuliRouteByMembership=async function(){
+      const result=await originalRoute.apply(this,arguments);
+      if(result&&result.role!=='driver')await refreshAccess();
+      return result;
+    };
+  }
+
+  const originalSavePermissions=window.saveModulePermissions;
+  if(typeof originalSavePermissions==='function'){
+    window.saveModulePermissions=async function(){
+      const result=await originalSavePermissions.apply(this,arguments);
+      await refreshAccess();
+      return result;
+    };
+  }
+
+  const originalSwitchCompany=window.switchCompany;
+  if(typeof originalSwitchCompany==='function'){
+    window.switchCompany=async function(){
+      access={role:'pending',rights:Object.create(null)};
+      applyUI();
+      const result=await originalSwitchCompany.apply(this,arguments);
+      await refreshAccess();
+      return result;
+    };
+  }
+
+  const originalLogout=window.logoutCloud;
+  if(typeof originalLogout==='function'){
+    window.logoutCloud=async function(){
+      access={role:null,rights:Object.create(null)};
+      const result=await originalLogout.apply(this,arguments);
+      applyUI();
+      return result;
+    };
+  }
+
+  document.addEventListener('click',event=>{
+    const nav=event.target.closest&&event.target.closest('.sidebar .nav button[data-view]');
+    if(nav)setTimeout(applyUI,0);
+  },true);
+
+  if(cloudMode)refreshAccess();
+})();
+</script>
+
+</body></html>`;
   const win=window.open("","_blank");if(!win){alert("يرجى السماح بفتح نافذة التقرير.");return;}
   win.document.open();win.document.write(html);win.document.close();
   setTimeout(()=>{win.focus();win.print();},450);
