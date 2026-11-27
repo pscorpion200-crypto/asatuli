@@ -1385,6 +1385,62 @@ window.toggleAsatuliPassword=function(button){
 };
 </script>
 
+<style id="asatuli-dashboard-professional">
+/* Professional fleet dashboard theme */
+body:not(.auth-gate) .app{min-height:100vh!important;background:radial-gradient(ellipse at 20% 0%,#123c65 0%,transparent 45%),linear-gradient(135deg,#041326,#071e36 55%,#03101f)!important;color:#eaf5ff!important}
+body:not(.auth-gate) .sidebar{background:linear-gradient(180deg,#071a30,#061427 75%,#04101f)!important;border-left:1px solid #1c5280!important;box-shadow:0 12px 38px #0005!important}
+body:not(.auth-gate) .sidebar .brand{font-size:27px!important;font-weight:950!important;color:#f4fbff!important;letter-spacing:-.5px!important;text-shadow:0 0 20px #008bff55!important}
+body:not(.auth-gate) .sidebar .brand small{color:#74c9ff!important;letter-spacing:2px!important;font-size:10px!important}
+body:not(.auth-gate) .sidebar .nav button,body:not(.auth-gate) .sidebar button.nav{border-radius:13px!important;margin:5px 0!important;transition:all .18s ease!important}
+body:not(.auth-gate) .sidebar .nav button.active{background:linear-gradient(100deg,#0b92df,#1154a8)!important;border:1px solid #52c9ff!important;box-shadow:0 0 18px #008cff44!important}
+body:not(.auth-gate) .sidebar .nav button:hover{background:#123b63!important;transform:translateX(-2px)!important}
+body:not(.auth-gate) .main{background:transparent!important;padding:clamp(14px,3vw,28px)!important}
+body:not(.auth-gate) .main>.top{position:relative!important;overflow:hidden!important;border-radius:22px!important;padding:22px 25px!important;margin-bottom:22px!important;background:linear-gradient(110deg,rgba(8,40,72,.98),rgba(10,70,120,.88) 65%,rgba(2,26,50,.95))!important;border:1px solid #2c86c6!important;box-shadow:0 10px 32px #0003,inset 0 1px #ffffff18!important}
+body:not(.auth-gate) .main>.top:after{content:"🚚  ⟶  🚛"!important;position:absolute!important;left:18px!important;bottom:2px!important;font-size:48px!important;opacity:.12!important;filter:grayscale(1)!important;pointer-events:none!important}
+body:not(.auth-gate) .main>.top h1{font-size:clamp(22px,3vw,30px)!important;color:#fff!important;font-weight:950!important}
+body:not(.auth-gate) .main>.top .sub{color:#b8dcf6!important}
+body:not(.auth-gate) .main>.top #add{border:1px solid #62d4ff!important;background:linear-gradient(110deg,#05a9ef,#0754b9)!important;color:white!important;border-radius:13px!important;font-weight:850!important;box-shadow:0 5px 18px #009dff33!important}
+body:not(.auth-gate) .main .cards{gap:16px!important}
+body:not(.auth-gate) .main .card{background:linear-gradient(145deg,rgba(12,46,78,.94),rgba(5,24,44,.97))!important;border:1px solid rgba(68,158,219,.42)!important;border-radius:18px!important;color:#eaf6ff!important;box-shadow:0 8px 24px #0002,inset 0 1px #ffffff0b!important}
+body:not(.auth-gate) .main .cards>.card{position:relative!important;overflow:hidden!important;min-height:130px!important}
+body:not(.auth-gate) .main .cards>.card:before{content:""!important;position:absolute!important;top:-35px!important;left:-30px!important;width:110px!important;height:110px!important;border-radius:50%!important;background:#08a9ff!important;opacity:.09!important;filter:blur(20px)!important}
+body:not(.auth-gate) .main .card h2,body:not(.auth-gate) .main .card h3{color:#f2f9ff!important;font-weight:900!important}
+body:not(.auth-gate) .main .card .label{color:#b9d9f1!important;font-weight:800!important}
+body:not(.auth-gate) .main .card .stat{color:#fff!important;font-weight:950!important;font-size:clamp(24px,3vw,32px)!important;text-shadow:0 0 15px #26aaff22!important}
+body:not(.auth-gate) .main .card .sub{color:#a7cce8!important}
+body:not(.auth-gate) .main .card .icon{filter:drop-shadow(0 5px 10px #008cff22)!important}
+body:not(.auth-gate) .main .section{margin-top:16px!important}
+body:not(.auth-gate) .main .twocol{gap:16px!important}
+body:not(.auth-gate) .main table{border-collapse:separate!important;border-spacing:0!important;color:#eaf5ff!important;width:100%!important}
+body:not(.auth-gate) .main table th{background:#0d3559!important;color:#c6e7ff!important;font-weight:850!important}
+body:not(.auth-gate) .main table th,body:not(.auth-gate) .main table td{border-bottom:1px solid #234a6b!important;padding:11px 10px!important}
+body:not(.auth-gate) .main table tbody tr:hover{background:#123b5e66!important}
+body:not(.auth-gate) .main .tablewrap{border-radius:14px!important;border:1px solid #24577b!important}
+body:not(.auth-gate) .main input,body:not(.auth-gate) .main select,body:not(.auth-gate) .main textarea{background:#061d35!important;color:#f0f8ff!important;border:1px solid #367cae!important;border-radius:11px!important}
+body:not(.auth-gate) .main input::placeholder{color:#95b8d2!important}
+body:not(.auth-gate) .main .btn,body:not(.auth-gate) .main button.btn{border-radius:11px!important;font-weight:800!important}
+body:not(.auth-gate) .main .btn.secondary{background:#0e3456!important;color:#dff3ff!important;border:1px solid #377daf!important}
+body:not(.auth-gate) .main .footer{color:#8eb9d7!important}
+body:not(.auth-gate) .main .view:not(.active){display:none!important}
+body:not(.auth-gate) .main .view.active{animation:asatuli-view-in .22s ease-out!important}
+@keyframes asatuli-view-in{from{opacity:.5;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:850px){
+ body:not(.auth-gate) .main{padding:12px!important}
+ body:not(.auth-gate) .main>.top{padding:17px!important;border-radius:16px!important}
+ body:not(.auth-gate) .main .cards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ body:not(.auth-gate) .main .twocol{grid-template-columns:1fr!important}
+ body:not(.auth-gate) .sidebar{max-width:100%!important}
+}
+@media(max-width:540px){
+ body:not(.auth-gate) .main>.top{gap:12px!important;align-items:flex-start!important;flex-wrap:wrap!important}
+ body:not(.auth-gate) .main>.top #add{width:100%!important}
+ body:not(.auth-gate) .main .cards{gap:10px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ body:not(.auth-gate) .main .cards>.card{min-height:105px!important;padding:12px!important}
+ body:not(.auth-gate) .main .card{border-radius:14px!important}
+ body:not(.auth-gate) .main .tablewrap{overflow-x:auto!important}
+ body:not(.auth-gate) .main table{min-width:580px!important}
+}
+</style>
 </body>
 </html>
 
