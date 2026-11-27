@@ -183,6 +183,16 @@ assert.ok(
     html.includes("Number(x.loaded_meters||0)"),
   "Loaded meters must be editable, visible in trip records, and included in reporting",
 );
+const monthlyReportStart = html.indexOf("function renderMonthlyReport(){");
+const monthlyReportEnd = html.indexOf("function exportDriverReportCSV", monthlyReportStart);
+assert.ok(monthlyReportStart >= 0 && monthlyReportEnd > monthlyReportStart, "Monthly report function is missing");
+const monthlyReportSource = html.slice(monthlyReportStart, monthlyReportEnd);
+assert.ok(
+  monthlyReportSource.includes("const vehicleRows=") &&
+    monthlyReportSource.includes("${vehicleRows||") &&
+    monthlyReportSource.includes("loadedMeters.toLocaleString"),
+  "Monthly report must build its vehicle rows and loaded-meter totals before rendering",
+);
 assert.ok(
   html.includes("data[key]=value") &&
     html.includes("value<0") &&
