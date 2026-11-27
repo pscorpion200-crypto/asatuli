@@ -27,3 +27,5 @@ jobs:
         run: node scripts/check-asatuli.mjs
       - name: Type-check server-side driver upload function
         run: deno check --no-lock supabase/functions/driver-save-trip-with-invoices/index.ts
+      - name: Type-check server-side owner driver creation function
+        run: deno check --no-lock supabase/functions/owner-create-driver/index.ts
