@@ -125,6 +125,46 @@ for (let index = 0; index < blocks.length; index += 1) {
   }
 }
 
+const escapeHelpersStart = html.indexOf("function escHTML(value)");
+const escapeHelpersEnd = html.indexOf("function save()", escapeHelpersStart);
+assert.ok(escapeHelpersStart >= 0 && escapeHelpersEnd > escapeHelpersStart, "HTML escaping helpers must be defined before the demo store functions");
+const escapeHelpers = html.slice(escapeHelpersStart, escapeHelpersEnd);
+const { escHTML, jsArg } = new Function(escapeHelpers + "; return { escHTML, jsArg };")();
+const xssProbe = "x');alert(1);//<img src=x onerror=alert(1)> \" &";
+const encodedJsArg = jsArg(xssProbe);
+const htmlEntities = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '\"', "&#39;": "'" };
+const decodedJsArg = encodedJsArg.replace(/&(amp|lt|gt|quot|#39);/g, (entity) => htmlEntities[entity]);
+assert.equal(JSON.parse(decodedJsArg), xssProbe, "Inline event arguments must remain valid JSON string literals for hostile record IDs");
+assert.ok(!/[<>\"']/.test(encodedJsArg), "Inline event arguments must be HTML-attribute escaped");
+assert.equal(escHTML("<img src=x onerror=alert(1)>"), "&lt;img src=x onerror=alert(1)&gt;", "User-provided text must be escaped before HTML insertion");
+
+const mainRenderStart = html.indexOf("function render(){");
+const mainRenderEnd = html.indexOf("function empty()", mainRenderStart);
+assert.ok(mainRenderStart >= 0 && mainRenderEnd > mainRenderStart, "Main fleet renderer is missing");
+const mainRender = html.slice(mainRenderStart, mainRenderEnd);
+for (const escapedValue of [
+  "escHTML(x.insurance||'—')",
+  "escHTML(x.license||'—')",
+  "escHTML(x.status||'نشطة')",
+  "escHTML(x.day||'—')",
+  "escHTML(x.liters??0)",
+  "escHTML(x.next_date||'—')",
+  "escHTML(a.msg)",
+  "escHTML(v.id)",
+  "escHTML(v.plate)",
+]) {
+  assert.ok(mainRender.includes(escapedValue), "Main renderer must escape dynamic HTML value: " + escapedValue);
+}
+assert.ok(mainRender.includes("jsArg(x.id)") && !mainRender.includes("'${x.id}'"), "Main table actions must encode record IDs as safe JavaScript arguments");
+const modalStart = html.indexOf("function openModal(");
+const modalEnd = html.indexOf("function closeModal()", modalStart);
+assert.ok(modalStart >= 0 && modalEnd > modalStart, "Record modal renderer is missing");
+const modalSource = html.slice(modalStart, modalEnd);
+assert.ok(modalSource.includes("escHTML(record?.[key]??'')") && modalSource.includes("escHTML(v.id)") && modalSource.includes("escHTML(v.plate)") && modalSource.includes("escHTML(d.id)") && modalSource.includes("escHTML(d.name)"), "Record modal must escape editable values and select option values/labels");
+assert.ok(html.includes('onclick="printVehicleHistory(${jsArg(id)})"') && html.includes('onclick="exportSingleDriverCSV(${jsArg(id)})"') && html.includes('onclick="printSingleDriverHistory(${jsArg(id)})"'), "History actions must encode record IDs as safe JavaScript arguments");
+assert.ok(html.includes('href="${escHTML(sd.signedUrl)}"'), "Invoice signed URLs must be escaped for HTML attributes");
+assert.ok(html.includes('onclick="setFleetIncidentStatus(${jsArg(x.id)})"') && html.includes('onclick="deleteFleetIncident(${jsArg(x.id)})"'), "Incident actions must encode locally stored IDs as safe JavaScript arguments");
+
 const invoiceReview = html.match(
   /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
 )?.[1] ?? "";
