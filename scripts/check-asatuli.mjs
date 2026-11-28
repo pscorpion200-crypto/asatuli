@@ -266,6 +266,20 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
+assert.equal(
+  (html.match(/cdn\\.jsdelivr\\.net\\/npm\\\/@supabase\\/supabase-js@/g) || []).length,
+  1,
+  "The Supabase browser SDK must be loaded from one pinned CDN artifact",
+);
+assert.ok(
+  html.includes("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/dist/umd/supabase.js"),
+  "The Supabase browser SDK must use the reviewed, pinned UMD release",
+);
+assert.ok(
+  !html.includes("@supabase/supabase-js@2</script>"),
+  "The Supabase browser SDK must not use a floating major-version CDN alias",
+);
+
 const invoiceReview = html.match(
   /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
 )?.[1] ?? "";
