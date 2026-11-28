@@ -613,8 +613,8 @@ const result=await response.json().catch(()=>({}));
 if(!response.ok||result.error)throw new Error(result.error||'تعذر حفظ الرحلة');
 if(result.duplicate){
  const editedDraft=!pendingTripSnapshot||tripDraftSnapshot(tripFormFields)!==pendingTripSnapshot;
- resetPendingTripSubmission();
  if(editedDraft){
+  resetPendingTripSubmission();
   status.textContent='✅ تأكد حفظ المحاولة السابقة. احتفظنا بالبيانات الحالية؛ راجعها قبل إرسال رحلة جديدة.';
   alert('المحاولة السابقة محفوظة بالفعل ولم تُكرر. احتفظنا بالبيانات الحالية ولم نمسحها. راجعها قبل تسجيل رحلة جديدة.');
   return;
