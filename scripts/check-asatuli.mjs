@@ -74,6 +74,14 @@ assert.equal(
   1,
   "Only one active driver-account creation handler may be registered",
 );
+const driverAccountUiStart = html.indexOf("// لوحة إنشاء حسابات السائقين");
+const driverAccountUiEnd = html.indexOf("</script>", driverAccountUiStart);
+assert.ok(driverAccountUiStart >= 0 && driverAccountUiEnd > driverAccountUiStart, "Driver account UI script must exist");
+const driverAccountUiSource = html.slice(driverAccountUiStart, driverAccountUiEnd);
+assert.ok(driverAccountUiSource.includes("const nav=sidebar.querySelector('.nav')||sidebar;"), "Driver account action must live inside the responsive navigation");
+assert.ok(driverAccountUiSource.includes("b.onclick=()=>window.openCreateDriver();"), "Driver account action must defer resolving its handler until click time");
+assert.ok(driverAccountUiSource.includes("await loadCloud('drivers')"), "Driver list must refresh after an account is created");
+
 
 const markupForIds = html
   .replace(/(<script\b[^>]*>)[\s\S]*?<\/script>/gi, "$1</script>")
