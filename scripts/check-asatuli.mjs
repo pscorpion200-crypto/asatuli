@@ -717,6 +717,7 @@ const backupEntries = new Map([
 const backupStorage = {
   get length() { return backupEntries.size; },
   key(index) { return [...backupEntries.keys()][index] ?? null; },
+  getItem(key) { return backupEntries.get(key) ?? null; },
 };
 let capturedBackupBlob = null;
 let backupAnchorClicked = false;
