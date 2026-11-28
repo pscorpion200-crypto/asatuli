@@ -34,6 +34,8 @@ Stop the test if any schema, RLS, function, trigger, or migration-history prereq
 
 - Confirm a driver can read/write only the assigned vehicle records allowed by current production RLS.
 - Confirm the driver cannot insert fuel or maintenance against an unassigned vehicle or another company.
+- In the isolated test database, assign a test vehicle to a manager/viewer without module grants and confirm that assignment alone does not grant driver-scoped fuel or maintenance access.
+- Confirm an assigned test driver retains the intended fuel and maintenance access.
 - Confirm manager access continues to follow explicit module permissions.
 - Confirm the new idempotency fields do not grant extra read, insert, update, or delete permissions.
 - Confirm the historical `consolidate_fleet_rls_policies.sql` script is not applied.
