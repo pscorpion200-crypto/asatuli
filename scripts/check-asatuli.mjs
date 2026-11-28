@@ -266,6 +266,25 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
+const cloudLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
+const cloudLoaderEnd = html.indexOf("const oldSave", cloudLoaderStart);
+assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud loader must support table-scoped refresh");
+const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);
+assert.ok(
+  cloudLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
+    cloudLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
+  "Cloud loader must refresh a validated selected table or all core tables",
+);
+const realtimeSyncStart = html.indexOf('<script id="asatuli-realtime-sync-v1">');
+const realtimeSyncEnd = html.indexOf("</script>", realtimeSyncStart);
+assert.ok(realtimeSyncStart >= 0 && realtimeSyncEnd > realtimeSyncStart, "Realtime sync handler is missing");
+const realtimeSyncSource = html.slice(realtimeSyncStart, realtimeSyncEnd);
+assert.ok(
+  realtimeSyncSource.includes("coreTables.has(table)?table:null") &&
+    realtimeSyncSource.includes("loadCloud(targetTable)"),
+  "Realtime changes to core fleet tables should reload only the affected table",
+);
+
 const reportExportStart = html.indexOf("function exportReport(){");
 const reportExportEnd = html.indexOf("function exportDriverReportCSV()", reportExportStart);
 assert.ok(reportExportStart >= 0 && reportExportEnd > reportExportStart, "Report export function is missing");
