@@ -167,6 +167,51 @@ assert.ok(modalSource.includes("escHTML(record?.[key]??'')") && modalSource.incl
 assert.ok(html.includes('onclick="printVehicleHistory(${jsArg(id)})"') && html.includes('onclick="exportSingleDriverCSV(${jsArg(id)})"') && html.includes('onclick="printSingleDriverHistory(${jsArg(id)})"'), "History actions must encode record IDs as safe JavaScript arguments");
 assert.ok(html.includes('href="${escHTML(sd.signedUrl)}"'), "Invoice signed URLs must be escaped for HTML attributes");
 assert.ok(html.includes('onclick="setFleetIncidentStatus(${jsArg(x.id)})"') && html.includes('onclick="deleteFleetIncident(${jsArg(x.id)})"'), "Incident actions must encode locally stored IDs as safe JavaScript arguments");
+const cacheGuardStart = html.indexOf("function hasCloudScopedRows(data)");
+const cacheGuardEnd = html.indexOf("function money(n)", cacheGuardStart);
+assert.ok(cacheGuardStart >= 0 && cacheGuardEnd > cacheGuardStart, "Cloud-cache detection and local-data loader are missing");
+const cacheGuardSource = html.slice(cacheGuardStart, cacheGuardEnd);
+const { hasCloudScopedRows } = new Function(cacheGuardSource + "; return { hasCloudScopedRows };")();
+assert.equal(
+  hasCloudScopedRows({ vehicles: [{ id: "v1" }], drivers: [], fuel: [], maintenance: [], trips: [] }),
+  false,
+  "Local-only fleet records must remain in the local demo store",
+);
+assert.equal(
+  hasCloudScopedRows({ vehicles: [{ id: "v1", company_id: "company-1" }], drivers: [], fuel: [], maintenance: [], trips: [] }),
+  true,
+  "Previously cached company-scoped cloud records must be detected for cleanup",
+);
+const cloudSaveStart = html.indexOf("const oldSave=save;");
+const cloudSaveEnd = html.indexOf("const oldRender=render;", cloudSaveStart);
+assert.ok(cloudSaveStart >= 0 && cloudSaveEnd > cloudSaveStart, "Cloud save wrapper is missing");
+const cloudSaveSource = html.slice(cloudSaveStart, cloudSaveEnd);
+assert.ok(
+  cloudSaveSource.includes("if(suppressLocalSave||cloudMode)return;oldSave();") &&
+    !cloudSaveSource.includes("localStorage.setItem('asatuli_demo'"),
+  "Cloud-mode renders and saves must not persist company records to the local demo key",
+);
+const logoutStart = html.indexOf("async function logoutCloud()");
+const logoutEnd = html.indexOf("async function switchCompany()", logoutStart);
+assert.ok(logoutStart >= 0 && logoutEnd > logoutStart, "Cloud logout function is missing");
+const logoutSource = html.slice(logoutStart, logoutEnd);
+assert.ok(
+  logoutSource.includes("if(!cloudMode&&!sb)") &&
+    logoutSource.includes("const {error}=await sb.auth.signOut();if(error)throw error;"),
+  "Cloud logout must be explicit and must not clear data when Supabase sign-out fails",
+);
+assert.ok(
+  logoutSource.includes("localStorage.removeItem('asatuli_active_company')") &&
+    logoutSource.includes("for(const key of ['vehicles','drivers','fuel','maintenance','trips'])store[key]=[]") &&
+    logoutSource.includes("suppressLocalSave=true") &&
+    logoutSource.includes("finally{suppressLocalSave=false}"),
+  "Cloud logout must clear active-company state and in-memory company records without overwriting local-only data",
+);
+assert.ok(
+  !logoutSource.includes("localStorage.removeItem('asatuli_demo')"),
+  "Cloud logout must not delete a user's separate local-only demo records",
+);
+
 
 const invoiceReview = html.match(
   /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
