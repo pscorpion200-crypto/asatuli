@@ -33,3 +33,7 @@ The application directly calls the invitation, owner-check, invite-member, remov
 The inspected definitions set `search_path` to `pg_catalog, public, pg_temp`. Keep this hardening in place for all privileged functions.
 
 A separate Auth Advisor warning reports that leaked-password protection is disabled. Enable the leaked-password protection setting in Supabase Auth configuration as a dashboard release task, then verify the sign-in and password-reset flows. This setting was not changed during this code review.
+
+## Frontend release gate for the driver idempotency migration
+
+The GitHub Pages deploy job requires repository variable `ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY=true`. Leave it unset or false until the additive migration `20261128082200_driver_operational_submission_idempotency.sql` has been approved, applied to production, and its two nullable columns plus two partial unique indexes have been verified. The validate job and Netlify PR preview remain available while the production deploy job is skipped. After verification, an authorized maintainer may set the variable and run the workflow on `main`.
