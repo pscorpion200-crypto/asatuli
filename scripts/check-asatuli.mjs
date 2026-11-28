@@ -370,6 +370,18 @@ assert.ok(
   "Trip submission ids must have a nullable, company/driver-scoped unique index",
 );
 
+const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
+const moduleAccessScriptEnd = html.indexOf("</script>", moduleAccessScriptStart);
+assert.ok(moduleAccessScriptStart >= 0 && moduleAccessScriptEnd > moduleAccessScriptStart, "Module permission enforcement script must be present");
+const moduleAccessSource = html.slice(moduleAccessScriptStart, moduleAccessScriptEnd);
+assert.ok(
+  moduleAccessSource.includes("const originalDelete=window.del") &&
+    moduleAccessSource.includes("if(!can(moduleName,'delete'))") &&
+    moduleAccessSource.includes("return originalDelete.apply(this,arguments)") &&
+    !moduleAccessSource.includes(".from(moduleName).delete()"),
+  "Module permission enforcement must delegate deletion to the version-checked handler rather than bypass optimistic locking",
+);
+
 const optimisticTables = ["vehicles", "drivers", "fuel", "maintenance", "trips"];
 assert.ok(
   (fleetOptimisticLockMigration.match(/ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT clock_timestamp\(\)/g) || []).length === optimisticTables.length &&
