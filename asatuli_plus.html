@@ -484,20 +484,25 @@ async function loadCloud(targetTable=null){
  const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};
  const selected=targetTable?[targetTable]:Object.keys(tables);
  if(selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k)))throw new Error('جدول تحديث غير معروف');
+ const requestedCompanyId=companyId;
+ const stagedRows={};
  const pageSize=500;
  for(const k of selected){
   const rows=[];
   for(let from=0;;from+=pageSize){
    let q=sb.from(tables[k]).select('*');
-   if(companyId)q=q.eq('company_id',companyId);
+   if(requestedCompanyId)q=q.eq('company_id',requestedCompanyId);
    const {data,error}=await q.order('id',{ascending:true}).range(from,from+pageSize-1);
    if(error)throw error;
+   if(companyId!==requestedCompanyId)throw new Error('تغيرت الشركة النشطة أثناء تحميل البيانات. أعد المحاولة.');
    const page=data||[];
    rows.push(...page);
    if(page.length<pageSize)break;
   }
-  store[k]=rows;
+  stagedRows[k]=rows;
  }
+ if(companyId!==requestedCompanyId)throw new Error('تغيرت الشركة النشطة أثناء تحميل البيانات. أعد المحاولة.');
+ for(const k of selected)store[k]=stagedRows[k];
 }
 
 const oldSave=save;let suppressLocalSave=false;save=function(){if(suppressLocalSave||cloudMode)return;oldSave();};
@@ -683,7 +688,73 @@ function exportDriverReportCSV(){
 function printReport(){renderMonthlyReport();window.print();}
 function clearReportMonth(){document.getElementById('reportMonth').value='';renderMonthlyReport()}document.getElementById('reportMonth')?.addEventListener('change',renderMonthlyReport);document.getElementById('reportVehicle')?.addEventListener('change',renderMonthlyReport);window.asatuliRegisterScopeRefresher?.(renderMonthlyReport);async function resumeCloudSession(){try{const cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');if(!cfg.url||!cfg.key)return;sb=window.supabase.createClient(cfg.url,cfg.key);const {data,error}=await sb.auth.getSession();if(error||!data.session){sb=null;cloudUserId=null;return;}cloudUserId=data.session.user?.id||null;if(!cloudUserId){sb=null;return;}const mem=await sb.from('members').select('company_id');if(mem.error){sb=null;return;}const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];if(!ids.length){sb=null;return;}if(ids.length===1)companyId=ids[0];else{const choices=await Promise.all(ids.map(async id=>{const c=await sb.from('companies').select('name').eq('id',id).single();return{id,name:c.data?.name||'شركة'};}));const saved=localStorage.getItem('asatuli_active_company');const chosen=choices.find(c=>c.id===saved)||choices[0];companyId=chosen.id;}cloudMode=true;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();window.asatuliRefreshScopedLocalData?.();document.body.classList.remove('auth-gate');try{render();}catch(uiError){console.error('Asatuli restored-session render failed',uiError);}try{renderMonthlyReport();}catch(reportError){console.error('Asatuli restored-session report failed',reportError);}try{await refreshAuditOwnerUI();}catch(auditError){console.warn('Asatuli restored-session audit controls failed',auditError);}if(typeof window.asatuliRouteByMembership==='function'){try{await window.asatuliRouteByMembership();}catch(routeError){console.error('Asatuli restored-session routing failed',routeError);if(typeof showFleetToast==='function')showFleetToast('تعذر فتح صفحة الحساب: '+(routeError.message||routeError),'error');}}try{window.startAsatuliRealtimeSync?.();}catch(syncError){console.warn('Asatuli restored-session realtime sync failed',syncError);}const sub=document.querySelector('.sub');if(sub)sub.textContent='نظرة عامة على عمليات أسطولك — متصل بالسحابة';}catch(e){console.warn('Cloud session resume failed',e);}}
 async function logoutCloud(){if(!cloudMode&&!sb){if(typeof showFleetToast==='function')showFleetToast('لا يوجد اتصال سحابي نشط.','warning');return;}try{try{await window.stopAsatuliRealtimeSync?.();}catch(stopError){console.warn('Asatuli realtime stop failed',stopError);}if(sb){const {error}=await sb.auth.signOut();if(error)throw error;}}catch(e){console.warn('Asatuli sign-out failed',e);try{window.startAsatuliRealtimeSync?.();}catch(restartError){console.warn('Asatuli realtime restart failed',restartError);}if(typeof showFleetToast==='function')showFleetToast('تعذر تسجيل الخروج بأمان: '+(e.message||e),'error');else alert('تعذر تسجيل الخروج: '+(e.message||e));return;}cloudMode=false;companyId=null;cloudUserId=null;sb=null;localStorage.removeItem('asatuli_active_company');for(const key of ['vehicles','drivers','fuel','maintenance','trips'])store[key]=[];suppressLocalSave=true;try{render();if(typeof renderMonthlyReport==='function')renderMonthlyReport();}catch(clearError){console.warn('Asatuli view cleanup failed',clearError);}finally{suppressLocalSave=false;}const auditBtn=document.getElementById('auditLogBtn');if(auditBtn)auditBtn.style.display='none';const auditBox=document.getElementById('auditLog');if(auditBox)auditBox.textContent='';document.body.classList.add('auth-gate');openConnect();const status=document.getElementById('connectStatus');if(status)status.textContent='تم تسجيل الخروج. تم إخفاء بيانات الشركة من الجلسة الحالية.';}
-async function switchCompany(){if(!sb||!cloudMode){alert('سجّل الدخول إلى السحابة أولاً.');return;}try{const mem=await sb.from('members').select('company_id');if(mem.error)throw mem.error;const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];if(ids.length<2){alert('حسابك مرتبط بشركة واحدة فقط.');return;}const choices=await Promise.all(ids.map(async id=>{const r=await sb.from('companies').select('name').eq('id',id).single();return{id,name:r.data?.name||'شركة'};}));const choice=prompt('اختر رقم الشركة:\n'+choices.map((c,i)=>`${i+1}. ${c.name}`).join('\n'),'1');const n=Number(choice);if(!n||n<1||n>choices.length)return;companyId=choices[n-1].id;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();window.asatuliRefreshScopedLocalData?.();window.startAsatuliRealtimeSync?.();await refreshAuditOwnerUI();render();renderMonthlyReport();const sub=document.querySelector('.sub');if(sub)sub.textContent='متصل بالسحابة — '+choices[n-1].name;}catch(e){alert('تعذر تبديل الشركة: '+(e.message||e));}}renderMonthlyReport();</script><div class="modal" id="historyModal"><div class="modalbox"><h2 id="historyTitle">سجل المركبة</h2><div id="historyContent"></div><div class="actions"><button class="btn secondary" onclick="closeHistory()">إغلاق</button></div></div></div><script>
+async function switchCompany(){
+ if(!sb||!cloudMode){alert('سجّل الدخول إلى السحابة أولاً.');return;}
+ const previousCompanyId=companyId;
+ const previousActiveCompany=localStorage.getItem('asatuli_active_company');
+ const coreTables=['vehicles','drivers','fuel','maintenance','trips'];
+ const previousStore=Object.fromEntries(coreTables.map(key=>[key,store[key]]));
+ const app=document.querySelector('.app');
+ const previousInert=app?.inert??false;
+ const previousBusy=app?.getAttribute('aria-busy');
+ let realtimeStopped=false;
+ let overlay=null;
+ try{
+  const mem=await sb.from('members').select('company_id');
+  if(mem.error)throw mem.error;
+  const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];
+  if(ids.length<2){alert('حسابك مرتبط بشركة واحدة فقط.');return;}
+  const choices=await Promise.all(ids.map(async id=>{
+   const r=await sb.from('companies').select('name').eq('id',id).single();
+   if(r.error)throw r.error;
+   return{id,name:r.data?.name||'شركة'};
+  }));
+  const choice=prompt('اختر رقم الشركة:\n'+choices.map((c,i)=>(i+1)+'. '+c.name).join('\n'),'1');
+  const n=Number(choice);
+  if(!choice||!n||n<1||n>choices.length)return;
+  const selected=choices[n-1];
+  if(selected.id===previousCompanyId)return;
+
+  await window.stopAsatuliRealtimeSync?.();
+  realtimeStopped=true;
+  if(app){app.inert=true;app.setAttribute('aria-busy','true');}
+  overlay=document.createElement('div');
+  overlay.setAttribute('role','status');
+  overlay.setAttribute('aria-live','polite');
+  overlay.textContent='جارٍ تحميل بيانات الشركة الجديدة...';
+  overlay.style.cssText='position:fixed;inset:0;z-index:2147482000;display:grid;place-items:center;padding:20px;background:rgba(5,20,40,.72);color:#fff;font:800 16px system-ui;text-align:center;backdrop-filter:blur(5px)';
+  document.body.appendChild(overlay);
+
+  companyId=selected.id;
+  localStorage.setItem('asatuli_active_company',companyId);
+  await loadCloud();
+  window.asatuliRefreshScopedLocalData?.();
+  await refreshAuditOwnerUI();
+  if(typeof window.asatuliRouteByMembership==='function')await window.asatuliRouteByMembership();
+  render();
+  renderMonthlyReport();
+  if(typeof window.refreshOwnerTripInvoices==='function')window.refreshOwnerTripInvoices();
+  const sub=document.querySelector('.sub');
+  if(sub)sub.textContent='متصل بالسحابة — '+selected.name;
+  window.startAsatuliRealtimeSync?.();
+  realtimeStopped=false;
+  if(typeof showFleetToast==='function')showFleetToast('تم تبديل الشركة وتحميل بياناتها بنجاح.');
+ }catch(e){
+  companyId=previousCompanyId;
+  if(previousActiveCompany===null)localStorage.removeItem('asatuli_active_company');
+  else localStorage.setItem('asatuli_active_company',previousActiveCompany);
+  for(const key of coreTables)store[key]=previousStore[key];
+  window.asatuliRefreshScopedLocalData?.();
+  try{if(typeof window.asatuliRouteByMembership==='function')await window.asatuliRouteByMembership();}catch(routeError){console.error('Could not restore previous company route',routeError);}
+  try{await refreshAuditOwnerUI();}catch(auditError){console.warn('Could not restore previous company audit view',auditError);}
+  try{render();renderMonthlyReport();}catch(renderError){console.warn('Could not restore previous company view',renderError);}
+  if(realtimeStopped){try{window.startAsatuliRealtimeSync?.();}catch(syncError){console.warn('Could not restart previous company realtime sync',syncError);}}
+  alert('تعذر تبديل الشركة؛ أعدنا الشركة السابقة وبياناتها إلى الشاشة: '+(e.message||e));
+ }finally{
+  overlay?.remove();
+  if(app){app.inert=previousInert;if(previousBusy===null)app.removeAttribute('aria-busy');else app.setAttribute('aria-busy',previousBusy);}
+ }
+}renderMonthlyReport();</script><div class="modal" id="historyModal"><div class="modalbox"><h2 id="historyTitle">سجل المركبة</h2><div id="historyContent"></div><div class="actions"><button class="btn secondary" onclick="closeHistory()">إغلاق</button></div></div></div><script>
 function closeHistory(){document.getElementById('historyModal').classList.remove('open')}
 function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)return;const fuel=store.fuel.filter(x=>x.vehicle_id===id),maint=store.maintenance.filter(x=>x.vehicle_id===id),trips=store.trips.filter(x=>x.vehicle_id===id);const fc=fuel.reduce((a,x)=>a+Number(x.price||0),0),liters=fuel.reduce((a,x)=>a+Number(x.liters||0),0),mc=maint.reduce((a,x)=>a+Number(x.cost||0),0),rev=trips.reduce((a,x)=>a+Number(x.revenue||0),0),other=trips.reduce((a,x)=>a+Number(x.other_cost||0),0),km=trips.reduce((a,x)=>a+Number(x.km||0),0),costPerKm=km?(fc+mc+other)/km:0,fuelPer100=km&&liters?liters*100/km:0;let entries=[...fuel.map(x=>({day:x.day,type:'وقود',desc:`${x.liters||0} لتر`,amount:Number(x.price||0)})),...maint.map(x=>({day:x.day,type:'صيانة',desc:x.descr||'—',amount:Number(x.cost||0)})),...trips.map(x=>({day:x.day,type:'رحلة',desc:`${escHTML(dname(x.driver_id))} • ${x.km||0} كم`,amount:Number(x.other_cost||0),income:Number(x.revenue||0)}))].sort((a,b)=>(b.day||'').localeCompare(a.day||''));document.getElementById('historyTitle').textContent='سجل المركبة: '+v.plate;document.getElementById('historyContent').innerHTML=`<button class="btn secondary" onclick="printVehicleHistory(${jsArg(id)})">طباعة تقرير المركبة / PDF</button><div class="cards"><div class="card"><div class="label">إيرادات</div><div class="stat">${money(rev)}</div></div><div class="card"><div class="label">وقود</div><div class="stat">${money(fc)}</div><div class="sub">${money(liters)} لتر</div></div><div class="card"><div class="label">صيانة</div><div class="stat">${money(mc)}</div></div><div class="card"><div class="label">مصاريف أخرى</div><div class="stat">${money(other)}</div></div><div class="card"><div class="label">الكيلومترات</div><div class="stat">${km}</div><div class="sub">كم مسجل</div></div><div class="card"><div class="label">تكلفة الكيلومتر</div><div class="stat">${money(costPerKm)}</div><div class="sub">دينار/كم (تقريبية)</div></div><div class="card"><div class="label">استهلاك الوقود</div><div class="stat">${money(fuelPer100)}</div><div class="sub">لتر لكل 100 كم (تقديري)</div></div></div><p><b>صافي العمليات المسجلة:</b> ${money(rev-fc-mc-other)} دينار</p><div class="tablewrap"><table><thead><tr><th>التاريخ</th><th>النوع</th><th>التفاصيل</th><th>المبلغ</th><th>الإيراد</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${escHTML(e.day||'—')}</td><td>${e.type}</td><td>${escHTML(e.desc)}</td><td>${money(e.amount)}</td><td>${money(e.income||0)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">لا توجد سجلات لهذه المركبة</td></tr>'}</tbody></table></div>`;document.getElementById('historyModal').classList.add('open')}
 </script>
