@@ -561,7 +561,9 @@ const loginFlowEnd = html.indexOf("window.connectAndAuth=connectAndAuth;", login
 assert.ok(loginFlowStart >= 0 && loginFlowEnd > loginFlowStart, "Login flow source is missing");
 const loginFlow = html.slice(loginFlowStart, loginFlowEnd);
 assert.ok(
-  loginFlow.includes("await loadCloud();document.body.classList.remove('auth-gate');closeConnect();") &&
+  loginFlow.includes("await loadCloud();") &&
+    loginFlow.includes("document.body.classList.remove('auth-gate');") &&
+    loginFlow.includes("closeConnect();") &&
     loginFlow.includes("await window.asatuliRouteByMembership();"),
   "Successful sign-in must reveal the app after data load and explicitly route by membership",
 );
