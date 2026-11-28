@@ -35,6 +35,10 @@ const driverRecordIdempotencyMigration = readFileSync(
   resolve(root, "supabase/migrations/20261128082200_driver_operational_submission_idempotency.sql"),
   "utf8",
 );
+const assignedDriverAccessMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128120000_require_driver_role_for_assigned_vehicle_access.sql"),
+  "utf8",
+);
 const fleetOptimisticLockMigration = readFileSync(
   resolve(root, "supabase/migrations/20261128042012_fleet_record_optimistic_locking.sql"),
   "utf8",
@@ -392,6 +396,13 @@ assert.ok(
     tripSubmissionIdempotencyMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS trips_company_driver_submission_unique") &&
     tripSubmissionIdempotencyMigration.includes("WHERE submission_id IS NOT NULL"),
   "Trip submission ids must have a nullable, company/driver-scoped unique index",
+);
+assert.ok(
+  assignedDriverAccessMigration.includes("CREATE OR REPLACE FUNCTION public.employee_assigned_vehicle") &&
+    assignedDriverAccessMigration.includes("SET search_path = pg_catalog, public, pg_temp") &&
+    assignedDriverAccessMigration.includes("SECURITY DEFINER") &&
+    assignedDriverAccessMigration.includes("AND m.role = 'driver'"),
+  "Vehicle-assignment RLS helper must grant assigned-vehicle access only to active driver memberships",
 );
 assert.ok(
   driverRecordIdempotencyMigration.includes("ALTER TABLE public.fuel") &&
