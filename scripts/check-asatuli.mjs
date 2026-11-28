@@ -411,6 +411,86 @@ assert.ok(
     html.includes("يمكن أن يكون مبلغ التعبئة صفراً"),
   "Driver fuel entry must permit the database-supported zero price while requiring positive liters",
 );
+const idempotencyHelperStart = html.indexOf("async function saveDriverRecordIdempotently(");
+const idempotencyHelperEnd = html.indexOf("\\nfunction showDriverView(", idempotencyHelperStart);
+assert.ok(idempotencyHelperStart >= 0 && idempotencyHelperEnd > idempotencyHelperStart, "Driver idempotency helper source is missing");
+const idempotencyHelperSource = html.slice(idempotencyHelperStart, idempotencyHelperEnd);
+const pendingStorage = new Map();
+const fakeLocalStorage = {
+  getItem(key) { return pendingStorage.has(key) ? pendingStorage.get(key) : null; },
+  setItem(key, value) { pendingStorage.set(key, String(value)); },
+  removeItem(key) { pendingStorage.delete(key); },
+};
+let persistedDriverRow = null;
+let insertAttempts = 0;
+let refreshedTables = [];
+const fakeSupabase = {
+  from(table) {
+    return {
+      insert(record) {
+        insertAttempts += 1;
+        if (insertAttempts === 1) {
+          persistedDriverRow = { id: "row-confirmed-after-timeout", ...record, table };
+          return {
+            select: async () => ({
+              data: null,
+              error: { code: "NETWORK_ERROR", message: "simulated response timeout after commit" },
+            }),
+          };
+        }
+        return {
+          select: async () => ({
+            data: null,
+            error: { code: "23505", message: "duplicate idempotency key" },
+          }),
+        };
+      },
+      select() {
+        const filters = {};
+        const query = {
+          eq(column, value) { filters[column] = value; return query; },
+          async maybeSingle() {
+            const matches = persistedDriverRow &&
+              persistedDriverRow.table === table &&
+              Object.entries(filters).every(([column, value]) => persistedDriverRow[column] === value);
+            return { data: matches ? { id: persistedDriverRow.id } : null, error: null };
+          },
+        };
+        return query;
+      },
+    };
+  },
+};
+const buildIdempotentSave = new Function(
+  "sb", "companyId", "uid", "vehicle", "localStorage", "loadCloud", "console",
+  idempotencyHelperSource + "; return saveDriverRecordIdempotently;",
+);
+const simulatedRefresh = async (table) => { refreshedTables.push(table); };
+const idempotentSave = buildIdempotentSave(
+  fakeSupabase, "company-test", "driver-test", { id: "vehicle-test" },
+  fakeLocalStorage, simulatedRefresh, { warn() {} },
+);
+const retryPayload = {
+  company_id: "company-test",
+  vehicle_id: "vehicle-test",
+  day: "2026-11-28",
+  liters: 20,
+  price: 0,
+};
+let simulatedTimeoutSeen = false;
+try {
+  await idempotentSave("fuel", "fuel", retryPayload);
+} catch (error) {
+  simulatedTimeoutSeen = error.message.includes("simulated response timeout after commit");
+}
+assert.equal(simulatedTimeoutSeen, true, "A response timeout must be surfaced while retaining the pending idempotency key");
+assert.equal(pendingStorage.size, 1, "An ambiguous first attempt must keep its key in local storage for a retry");
+const confirmedRetry = await idempotentSave("fuel", "fuel", retryPayload);
+assert.equal(confirmedRetry.id, "row-confirmed-after-timeout", "A retry must resolve the previously committed row after a unique-key collision");
+assert.equal(insertAttempts, 2, "The retry must reuse the same key rather than creating another row");
+assert.equal(pendingStorage.size, 0, "A confirmed retry must clear the pending idempotency key");
+assert.deepEqual(refreshedTables, ["fuel"], "A confirmed operation must refresh only its affected table");
+
 assert.ok(
   html.includes("[x.insurance,x.license,x.next_maint].some(v=>v&&!validDate(v))") &&
     html.includes("numeric(x.liters,false)") &&
