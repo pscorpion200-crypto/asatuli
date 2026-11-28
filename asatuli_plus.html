@@ -1970,27 +1970,13 @@ body.asatuli-driver-mode{overflow-x:hidden!important}
     };
   }
 
-  window.del=async function(moduleName,id){
-    if(!can(moduleName,'delete')){toast('ليست لديك صلاحية حذف السجلات من هذا القسم.');return;}
-    if(!confirm('حذف هذا السجل؟'))return;
-    try{
-      if(cloudMode){
-        if(!sb||!companyId)throw new Error('اتصال قاعدة البيانات غير جاهز.');
-        const result=await sb.from(moduleName).delete()
-          .eq('id',id).eq('company_id',companyId).select('id');
-        if(result.error)throw result.error;
-        if(!result.data||!result.data.length)throw new Error('لم يتم تأكيد الحذف. قد لا تملك الصلاحية أو أن السجل غير موجود.');
-        await loadCloud();
-      }else{
-        store[moduleName]=store[moduleName].filter(row=>row.id!==id);
-      }
-      render();
-      if(typeof renderMonthlyReport==='function')renderMonthlyReport();
-      if(typeof window.showFleetToast==='function')window.showFleetToast('تم حذف السجل بنجاح.');
-    }catch(error){
-      toast('تعذر الحذف: '+(error.message||String(error)));
-    }
-  };
+  const originalDelete=window.del;
+  if(typeof originalDelete==='function'){
+    window.del=async function(moduleName,id){
+      if(!can(moduleName,'delete')){toast('ليست لديك صلاحية حذف السجلات من هذا القسم.');return;}
+      return originalDelete.apply(this,arguments);
+    };
+  }
 
   const form=document.getElementById('recordForm');
   if(form)form.addEventListener('submit',event=>{
