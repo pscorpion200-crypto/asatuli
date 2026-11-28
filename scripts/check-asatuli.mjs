@@ -156,6 +156,9 @@ for (const escapedValue of [
   assert.ok(mainRender.includes(escapedValue), "Main renderer must escape dynamic HTML value: " + escapedValue);
 }
 assert.ok(mainRender.includes("jsArg(x.id)") && !mainRender.includes("'${x.id}'"), "Main table actions must encode record IDs as safe JavaScript arguments");
+assert.equal(mainRender.includes("${x.day}"), false, "All operational dates in the main renderer must be escaped");
+assert.ok(html.includes("escHTML(x.last)") && html.includes("escHTML(x.date)"), "Fleet insights and expiry reports must escape stored dates");
+assert.ok(html.includes('href="${escHTML(data.signedUrl)}"'), "Driver invoice signed URLs must be escaped for HTML attributes");
 const modalStart = html.indexOf("function openModal(");
 const modalEnd = html.indexOf("function closeModal()", modalStart);
 assert.ok(modalStart >= 0 && modalEnd > modalStart, "Record modal renderer is missing");
