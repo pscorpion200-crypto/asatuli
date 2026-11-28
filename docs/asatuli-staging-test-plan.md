@@ -52,6 +52,14 @@ Use two test users and, where possible, two test companies in the same browser p
 - Export legacy local records and verify the downloaded JSON is labelled as unassigned device-local data.
 - Confirm sign-out does not expose legacy local records inside a signed-in session.
 
+## Company switching and atomic refresh
+
+- Sign in as a user who belongs to two test companies with different roles.
+- Switch from company A to company B and confirm every core table is reloaded under company B before the screen is updated.
+- Simulate a read failure on one core table during a full refresh. Confirm no subset of the old/new company arrays is committed.
+- Simulate a company switch failure and confirm the previous company ID, local storage scope, cached core data, page role, and realtime channel are restored.
+- Confirm switching between a manager and driver membership routes to the correct page for the selected company.
+
 ## Backup and restore
 
 - Create a cloud backup while signed in as user A/company A.
@@ -67,8 +75,8 @@ Use two test users and, where possible, two test companies in the same browser p
 - Confirm a production Supabase URL is rejected from the `deploy-preview-*.netlify.app` origin.
 - Confirm the preview can connect using only the dedicated branch URL/key and test-only users.
 - Confirm GitHub Pages deployment remains blocked unless the static checker and both Deno checks pass.
-- Keep the repository variable `ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY` unset/false until the production migration `20261128082200_driver_operational_submission_idempotency.sql` is approved, applied, and verified to create both `submission_id` columns and both partial unique indexes.
-- Only after that verification, set the repository variable to the literal `true` and trigger the GitHub Pages workflow on `main`. The deployment job is intentionally skipped while the variable is not true.
+- Keep the repository variable `ASATULI_PRODUCTION_MIGRATIONS_READY` unset/false until both production migrations `20261128082200_driver_operational_submission_idempotency.sql` and `20261128120000_require_driver_role_for_assigned_vehicle_access.sql` are approved, applied, and verified. Confirm the fuel/maintenance `submission_id` columns and partial unique indexes exist, and that `employee_assigned_vehicle` requires an active `driver` membership.
+- Only after both migrations are verified, set the repository variable to the literal `true` and trigger the GitHub Pages workflow on `main`. The deployment job is intentionally skipped while the variable is not true.
 - Do not merge or publish to production until all checks pass and the migration has been reviewed and explicitly approved.
 
 ## Current limitation
