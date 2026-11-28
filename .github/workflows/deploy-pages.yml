@@ -15,7 +15,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Validate scripts and invoice access rules
+        run: node scripts/check-asatuli.mjs
+      - name: Type-check server-side driver upload function
+        run: deno check --no-lock supabase/functions/driver-save-trip-with-invoices/index.ts
+      - name: Type-check server-side owner driver creation function
+        run: deno check --no-lock supabase/functions/owner-create-driver/index.ts
+
   deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
