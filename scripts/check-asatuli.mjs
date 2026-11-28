@@ -993,6 +993,7 @@ assert.ok(
   html.includes("const previousStore=Object.fromEntries(coreTables.map(key=>[key,store[key]]))") &&
     html.includes("companyId=previousCompanyId;") &&
     html.includes("await window.asatuliRouteByMembership()") &&
+    html.includes("window.asatuliShowManagerDashboard==='function')window.asatuliShowManagerDashboard()") &&
     html.includes("window.stopAsatuliRealtimeSync?.()") &&
     html.includes("تعذر تبديل الشركة؛ أعدنا الشركة السابقة وبياناتها"),
   "Company switching must stop old realtime updates, reload the role route, and rollback company/data on failure",
