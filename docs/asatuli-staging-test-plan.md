@@ -10,15 +10,24 @@
 
 ## Database branch readiness gate
 
-Before applying or testing `20261128082200_driver_operational_submission_idempotency.sql` and `20261128120000_require_driver_role_for_assigned_vehicle_access.sql`:
+Before applying or testing `20261128105009_driver_operational_submission_idempotency.sql` and `20261128105014_require_driver_role_for_assigned_vehicle_access.sql`:
 
 1. Confirm the development branch is isolated and contains no copied production data.
 2. Confirm all 12 production public tables and their columns, indexes, foreign keys, triggers, RLS policies, and required functions are present.
-3. Compare the branch schema with the approved production schema snapshot. The repository currently has 20 migration files while the production migration ledger contains 65 entries; do not assume the repository alone can rebuild the schema from zero.
+3. Compare the branch schema with the approved production schema snapshot. The repository currently has 20 migration files while the production migration ledger contains 67 entries; do not assume the repository alone can rebuild the schema from zero.
 4. Confirm `fuel` and `maintenance` have RLS enabled, and the branch policies preserve the existing assigned-vehicle or module-permission authorization rules.
 5. Apply the new migration only on the disposable branch, then verify both `submission_id` columns and the two partial unique indexes exist.
 
 Stop the test if any schema, RLS, function, trigger, or migration-history prerequisite is missing.
+
+## Production migration verification status (2026-11-28)
+
+- Applied production migration `20261128105009_driver_operational_submission_idempotency.sql` and `20261128105014_require_driver_role_for_assigned_vehicle_access.sql`.
+- Production ledger now contains 67 entries and records both migrations as `20261128105009` and `20261128105014`.
+- Verified nullable `submission_id` columns on `fuel` and `maintenance`, plus both partial unique indexes.
+- Verified the assigned-vehicle helper returns true for the linked assigned driver and false for an owner without an assignment.
+- Temporary transactional inserts confirmed driver RLS visibility and duplicate-key rejection; all test transactions were rolled back and production `fuel` / `maintenance` row counts remained zero.
+- These database checks do not replace the isolated browser tests below. A separate Supabase test branch and test users have not been created; real manager/driver sign-in, manager/viewer permission combinations, and multi-company switching remain unverified.
 
 ## Driver write idempotency
 
@@ -76,9 +85,10 @@ Use two test users and, where possible, two test companies in the same browser p
 - Confirm a production Supabase URL is rejected from the `deploy-preview-*.netlify.app` origin.
 - Confirm the preview can connect using only the dedicated branch URL/key and test-only users.
 - Confirm GitHub Pages deployment remains blocked unless the static checker and both Deno checks pass.
-- Keep the repository variable `ASATULI_PRODUCTION_MIGRATIONS_READY` unset/false until both production migrations `20261128082200_driver_operational_submission_idempotency.sql` and `20261128120000_require_driver_role_for_assigned_vehicle_access.sql` are approved, applied, and verified. Confirm the fuel/maintenance `submission_id` columns and partial unique indexes exist, and that `employee_assigned_vehicle` requires an active `driver` membership.
-- Only after both migrations are verified, set the repository variable to the literal `true` and trigger the GitHub Pages workflow on `main`. The deployment job is intentionally skipped while the variable is not true.
-- Do not merge or publish to production until all checks pass and the migration has been reviewed and explicitly approved.
+- The two production migrations are now applied and verified under ledger versions `20261128105009` and `20261128105014`. Their nullable `submission_id` columns, partial unique indexes, and driver-only assignment helper are present.
+- Keep `ASATULI_PRODUCTION_MIGRATIONS_READY` unset/false until isolated end-to-end account tests, review, and release approval are complete. Do not unlock the production Pages deploy from this staging checklist alone.
+- After the isolated manager/driver/role-switch tests pass and release approval is recorded, set the repository variable to the literal `true` and trigger the GitHub Pages workflow on `main`. The deployment job remains intentionally skipped while the variable is not true.
+- Do not merge or publish to production until the remaining end-to-end tests and release approval are complete.
 
 ## Current limitation
 
