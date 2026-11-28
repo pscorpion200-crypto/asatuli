@@ -266,6 +266,36 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
+const realtimeOptLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
+const realtimeOptLoaderEnd = html.indexOf("const oldSave", realtimeOptLoaderStart);
+assert.ok(realtimeOptLoaderStart >= 0 && realtimeOptLoaderEnd > realtimeOptLoaderStart, "Cloud loader must support table-scoped refresh");
+const realtimeOptLoaderSource = html.slice(realtimeOptLoaderStart, realtimeOptLoaderEnd);
+assert.ok(
+  realtimeOptLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
+    realtimeOptLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
+  "Cloud loader must refresh a validated selected table or all core tables",
+);
+const realtimeOptSyncStart = html.indexOf('<script id="asatuli-realtime-sync-v1">');
+const realtimeOptSyncEnd = html.indexOf("</script>", realtimeOptSyncStart);
+assert.ok(realtimeOptSyncStart >= 0 && realtimeOptSyncEnd > realtimeOptSyncStart, "Realtime sync handler is missing");
+const realtimeOptSyncSource = html.slice(realtimeOptSyncStart, realtimeOptSyncEnd);
+assert.ok(
+  realtimeOptSyncSource.includes("coreTables.has(table)?table:null") &&
+    realtimeOptSyncSource.includes("loadCloud(targetTable)"),
+  "Realtime changes to core fleet tables should reload only the affected table",
+);
+assert.ok(
+  realtimeOptSyncSource.includes("if(table&&coreTables.has(table))pendingCoreTables.add(table)") &&
+    realtimeOptSyncSource.includes("else pendingFullRefresh=true") &&
+    realtimeOptSyncSource.includes("if(pendingFullRefresh)") &&
+    realtimeOptSyncSource.includes("pendingCoreTables.clear()"),
+  "Debounced Realtime events must retain every affected core table and let auxiliary-table full refreshes take priority",
+);
+assert.ok(
+  realtimeOptSyncSource.includes("const queued=refreshQueued?[null]:[...queuedCoreTables]"),
+  "A queued auxiliary-table event must not be lost when core-table events are also queued during a refresh",
+);
+
 const reportExportStart = html.indexOf("function exportReport(){");
 const reportExportEnd = html.indexOf("function exportDriverReportCSV()", reportExportStart);
 assert.ok(reportExportStart >= 0 && reportExportEnd > reportExportStart, "Report export function is missing");
@@ -471,7 +501,7 @@ assert.ok(
     html.includes("table==='trips'&&data.km<=0"),
   "Fleet record forms must reject invalid or negative operational numbers",
 );
-const cloudLoaderStart = html.indexOf("async function loadCloud(){");
+const cloudLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
 const cloudLoaderEnd = html.indexOf("const oldSave=save", cloudLoaderStart);
 assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud data loader is missing");
 const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);

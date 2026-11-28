@@ -419,11 +419,13 @@ async function connectAndAuth(mode){
  }
 }
 window.connectAndAuth=connectAndAuth;
-async function loadCloud(){
+async function loadCloud(targetTable=null){
  if(!sb)return;
  const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};
+ const selected=targetTable?[targetTable]:Object.keys(tables);
+ if(selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k)))throw new Error('جدول تحديث غير معروف');
  const pageSize=500;
- for(const k of Object.keys(tables)){
+ for(const k of selected){
   const rows=[];
   for(let from=0;;from+=pageSize){
    let q=sb.from(tables[k]).select('*');
@@ -437,6 +439,7 @@ async function loadCloud(){
   store[k]=rows;
  }
 }
+
 const oldSave=save;let suppressLocalSave=false;save=function(){if(suppressLocalSave||cloudMode)return;oldSave();};
 const oldRender=render;render=function(){oldRender();};
 function showFleetToast(message,kind='success'){
@@ -1277,25 +1280,50 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
   }
   badge.textContent=label;badge.dataset.state=state;
  }
- async function refreshFromDatabase(){
+ const coreTables=new Set(['vehicles','drivers','fuel','maintenance','trips']);
+ let queuedCoreTables=new Set();
+ async function refreshFromDatabase(targetTable=null){
   if(!sb||!cloudMode||!companyId)return;
-  if(refreshing){refreshQueued=true;return;}
+  if(refreshing){if(targetTable)queuedCoreTables.add(targetTable);else refreshQueued=true;return;}
   refreshing=true;
   try{
-   await loadCloud();
+   if(targetTable&&coreTables.has(targetTable))await loadCloud(targetTable);
+   else await loadCloud();
    if(!document.body.classList.contains('asatuli-driver-mode')){render();renderMonthlyReport();}
    if(typeof window.refreshOwnerTripInvoices==='function')window.refreshOwnerTripInvoices();
    document.body.dataset.asatuliSync='connected';setSyncStatus('مزامنة مباشرة','on');
   }catch(e){console.warn('Asatuli live refresh failed',e);document.body.dataset.asatuliSync='error';setSyncStatus('تعذر تحديث البيانات','error');}
-  finally{refreshing=false;if(refreshQueued){refreshQueued=false;setTimeout(refreshFromDatabase,250);}}
+  finally{
+   refreshing=false;
+   if(refreshQueued||queuedCoreTables.size){
+    const queued=refreshQueued?[null]:[...queuedCoreTables];
+    refreshQueued=false;queuedCoreTables.clear();
+    setTimeout(()=>queued.forEach(table=>refreshFromDatabase(table)),250);
+   }
+  }
  }
- function queueRefresh(){if(refreshTimer)clearTimeout(refreshTimer);refreshTimer=setTimeout(refreshFromDatabase,450);}
+ let pendingCoreTables=new Set(),pendingFullRefresh=false;
+ function queueRefresh(table=null){
+  if(table&&coreTables.has(table))pendingCoreTables.add(table);
+  else pendingFullRefresh=true;
+  if(refreshTimer)clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(()=>{
+   refreshTimer=null;
+   if(pendingFullRefresh){
+    pendingFullRefresh=false;pendingCoreTables.clear();
+    refreshFromDatabase();
+   }else{
+    const pending=[...pendingCoreTables];pendingCoreTables.clear();
+    pending.forEach(table=>refreshFromDatabase(table));
+   }
+  },450);
+ }
  window.startAsatuliRealtimeSync=function(){
   if(!sb||!cloudMode||!companyId)return false;
   if(channel){try{sb.removeChannel(channel);}catch(e){console.warn('Could not remove old Realtime channel',e);}channel=null;}
   const currentCompany=companyId;setSyncStatus('جارٍ الاتصال بالمزامنة','loading');
   let next=sb.channel('asatuli-live-'+currentCompany);
-  tables.forEach(table=>{next=next.on('postgres_changes',{event:'*',schema:'public',table},queueRefresh);});
+  tables.forEach(table=>{next=next.on('postgres_changes',{event:'*',schema:'public',table},payload=>queueRefresh(coreTables.has(table)?table:null));});
   channel=next.subscribe(status=>{
    if(status==='SUBSCRIBED'){document.body.dataset.asatuliSync='connected';setSyncStatus('مزامنة مباشرة','on');}
    else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){document.body.dataset.asatuliSync='disconnected';setSyncStatus('المزامنة غير متصلة','error');}
