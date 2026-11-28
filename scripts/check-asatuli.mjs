@@ -60,6 +60,10 @@ const operationsReadme = readFileSync(
   resolve(root, "supabase/operations/README.md"),
   "utf8",
 );
+const deployWorkflow = readFileSync(
+  resolve(root, ".github/workflows/deploy-pages.yml"),
+  "utf8",
+);
 const unusedRpcRevocationMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127185742_revoke_unused_legacy_rpc_endpoints.sql"),
   "utf8",
@@ -972,6 +976,12 @@ assert.ok(
   removedMemberAccessMigration.includes("CREATE POLICY trip_invoice_read_company") &&
     removedMemberAccessMigration.includes("m.user_id = (SELECT auth.uid())"),
   "Trip invoice reads must be restricted to current company members",
+);
+
+assert.ok(
+  deployWorkflow.includes("needs: validate") &&
+    deployWorkflow.includes("vars.ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY == 'true'"),
+  "Production Pages deployment must stay gated until the driver idempotency migration is verified",
 );
 
 assert.ok(
