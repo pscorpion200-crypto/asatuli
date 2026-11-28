@@ -1296,15 +1296,27 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
   finally{
    refreshing=false;
    if(refreshQueued||queuedCoreTables.size){
-    const queued=queuedCoreTables.size?[...queuedCoreTables]:[null];
+    const queued=refreshQueued?[null]:[...queuedCoreTables];
     refreshQueued=false;queuedCoreTables.clear();
     setTimeout(()=>queued.forEach(table=>refreshFromDatabase(table)),250);
    }
   }
  }
+ let pendingCoreTables=new Set(),pendingFullRefresh=false;
  function queueRefresh(table=null){
+  if(table&&coreTables.has(table))pendingCoreTables.add(table);
+  else pendingFullRefresh=true;
   if(refreshTimer)clearTimeout(refreshTimer);
-  refreshTimer=setTimeout(()=>refreshFromDatabase(table),450);
+  refreshTimer=setTimeout(()=>{
+   refreshTimer=null;
+   if(pendingFullRefresh){
+    pendingFullRefresh=false;pendingCoreTables.clear();
+    refreshFromDatabase();
+   }else{
+    const pending=[...pendingCoreTables];pendingCoreTables.clear();
+    pending.forEach(table=>refreshFromDatabase(table));
+   }
+  },450);
  }
  window.startAsatuliRealtimeSync=function(){
   if(!sb||!cloudMode||!companyId)return false;
