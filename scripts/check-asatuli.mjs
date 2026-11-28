@@ -561,7 +561,9 @@ const loginFlowEnd = html.indexOf("window.connectAndAuth=connectAndAuth;", login
 assert.ok(loginFlowStart >= 0 && loginFlowEnd > loginFlowStart, "Login flow source is missing");
 const loginFlow = html.slice(loginFlowStart, loginFlowEnd);
 assert.ok(
-  loginFlow.includes("await loadCloud();document.body.classList.remove('auth-gate');closeConnect();") &&
+  loginFlow.includes("await loadCloud();") &&
+    loginFlow.includes("document.body.classList.remove('auth-gate');") &&
+    loginFlow.includes("closeConnect();") &&
     loginFlow.includes("await window.asatuliRouteByMembership();"),
   "Successful sign-in must reveal the app after data load and explicitly route by membership",
 );
@@ -569,6 +571,23 @@ assert.ok(
   !loginFlow.includes("await window.initAsatuliDriverPortal?.();"),
   "Login must not initialize the driver portal for every account",
 );
+assert.ok(
+  loginFlow.includes("await sb.rpc('accept_member_invites')") &&
+    loginFlow.includes("if(!members?.length)") &&
+    loginFlow.includes("لم يتم إنشاء شركة جديدة."),
+  "Login must accept valid invitations but reject accounts without a company membership instead of creating a company automatically",
+);
+assert.ok(
+  !loginFlow.includes("create_company") &&
+    !loginFlow.includes("auth.signUp") &&
+    !loginFlow.includes("asatuli_pending_company"),
+  "The login route must not expose signup or automatic company creation",
+);
+assert.ok(
+  !html.includes('id="companyName"'),
+  "The login page must not carry a hidden company name used by an implicit signup path",
+);
+
 const resumeFlowStart = html.indexOf("async function resumeCloudSession()");
 const resumeFlowEnd = html.indexOf("async function logoutCloud()", resumeFlowStart);
 assert.ok(resumeFlowStart >= 0 && resumeFlowEnd > resumeFlowStart, "Saved-session restore flow is missing");
