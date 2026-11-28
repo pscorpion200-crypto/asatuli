@@ -22,7 +22,7 @@ Do not execute a script in production merely because it exists here.
 The Supabase Security Advisor currently reports eight authenticated-callable `SECURITY DEFINER` functions. This is a review warning, not by itself proof that the functions are exploitable. The current production definitions were inspected read-only:
 
 - `accept_member_invites()` requires an authenticated user and accepts invitations only for the email in that user's JWT.
-- `employee_assigned_vehicle(uuid, uuid)` scopes its lookup to `auth.uid()`, a current company membership, and that user's vehicle assignment.
+- `employee_assigned_vehicle(uuid, uuid)` scopes its lookup to `auth.uid()`, a current company membership, that user's vehicle assignment, and the `driver` membership role.
 - `has_module_permission(uuid, text, text)` returns owner access or an explicit manager/viewer permission for the requested module/action.
 - `is_company_owner(uuid)` checks the caller's owner membership in the requested company.
 - `my_companies()` returns only company IDs attached to `auth.uid()`.
@@ -34,6 +34,8 @@ The inspected definitions set `search_path` to `pg_catalog, public, pg_temp`. Ke
 
 A separate Auth Advisor warning reports that leaked-password protection is disabled. Enable the leaked-password protection setting in Supabase Auth configuration as a dashboard release task, then verify the sign-in and password-reset flows. This setting was not changed during this code review.
 
-## Frontend release gate for the driver idempotency migration
+## Frontend production release gate
 
-The GitHub Pages deploy job requires repository variable `ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY=true`. Leave it unset or false until the additive migration `20261128082200_driver_operational_submission_idempotency.sql` has been approved, applied to production, and its two nullable columns plus two partial unique indexes have been verified. The validate job and Netlify PR preview remain available while the production deploy job is skipped. After verification, an authorized maintainer may set the variable and run the workflow on `main`.
+The GitHub Pages deploy job requires repository variable `ASATULI_PRODUCTION_MIGRATIONS_READY=true`. The required production migrations were applied and verified on 2026-11-28: `20261128105009_driver_operational_submission_idempotency.sql` and `20261128105014_require_driver_role_for_assigned_vehicle_access.sql`. The production migration ledger records both versions; the `fuel` and `maintenance` nullable `submission_id` columns, partial unique indexes, and driver-only assignment helper were verified. Temporary driver RLS and duplicate-submission tests were rolled back; no test rows remain in production.
+
+At this update, keep `ASATULI_PRODUCTION_MIGRATIONS_READY` unset/false. The isolated manager/driver sign-in, manager/viewer permission, and multi-company switching tests are still outstanding because no separate Supabase test branch or test credentials have been provisioned. The validate job and Netlify PR preview remain available while the production deploy job is skipped. Only after those end-to-end checks and explicit release approval may an authorized maintainer set the variable and run the workflow on `main`.
