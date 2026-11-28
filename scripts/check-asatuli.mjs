@@ -284,6 +284,17 @@ assert.ok(
     realtimeOptSyncSource.includes("loadCloud(targetTable)"),
   "Realtime changes to core fleet tables should reload only the affected table",
 );
+assert.ok(
+  realtimeOptSyncSource.includes("if(table&&coreTables.has(table))pendingCoreTables.add(table)") &&
+    realtimeOptSyncSource.includes("else pendingFullRefresh=true") &&
+    realtimeOptSyncSource.includes("if(pendingFullRefresh)") &&
+    realtimeOptSyncSource.includes("pendingCoreTables.clear()"),
+  "Debounced Realtime events must retain every affected core table and let auxiliary-table full refreshes take priority",
+);
+assert.ok(
+  realtimeOptSyncSource.includes("const queued=refreshQueued?[null]:[...queuedCoreTables]"),
+  "A queued auxiliary-table event must not be lost when core-table events are also queued during a refresh",
+);
 
 const reportExportStart = html.indexOf("function exportReport(){");
 const reportExportEnd = html.indexOf("function exportDriverReportCSV()", reportExportStart);
