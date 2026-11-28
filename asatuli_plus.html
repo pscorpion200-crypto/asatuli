@@ -355,7 +355,7 @@ const store={vehicles:[],drivers:[],fuel:[],maintenance:[],trips:[]};let current
  const baseRender=render;render=function(){baseRender();filterRows();};
 })();
 
-</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2/dist/umd/supabase.js"></script>
 <script>
 let sb=null, companyId=null, cloudMode=false;
 function openConnect(){document.getElementById('connectModal').classList.add('open');let cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');document.getElementById('sbUrl').value=cfg.url||'https://aicvzcxrakhzlcfosvsx.supabase.co';document.getElementById('sbKey').value=cfg.key||'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS';document.getElementById('connectStatus').textContent=''}
