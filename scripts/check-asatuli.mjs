@@ -204,7 +204,7 @@ assert.ok(
   logoutSource.includes("localStorage.removeItem('asatuli_active_company')") &&
     logoutSource.includes("for(const key of ['vehicles','drivers','fuel','maintenance','trips'])store[key]=[]") &&
     logoutSource.includes("suppressLocalSave=true") &&
-    logoutSource.includes("finally{suppressLocalSave=false}"),
+    logoutSource.includes("finally{suppressLocalSave=false;}"),
   "Cloud logout must clear active-company state and in-memory company records without overwriting local-only data",
 );
 assert.ok(
