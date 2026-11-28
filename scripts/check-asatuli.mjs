@@ -1120,7 +1120,7 @@ assert.ok(
 
 assert.ok(
   deployWorkflow.includes("needs: validate") &&
-    deployWorkflow.includes("vars.ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY == 'true'"),
+    deployWorkflow.includes("vars.ASATULI_PRODUCTION_MIGRATIONS_READY == 'true'"),
   "Production Pages deployment must stay gated until the driver idempotency migration is verified",
 );
 
