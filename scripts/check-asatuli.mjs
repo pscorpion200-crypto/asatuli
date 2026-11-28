@@ -981,6 +981,74 @@ assert.ok(
     cloudLoaderSource.includes("if(page.length<pageSize)break"),
   "Cloud data loading must paginate all operational records in stable batches",
 );
+
+assert.ok(
+  cloudLoaderSource.includes("const requestedCompanyId=companyId") &&
+    cloudLoaderSource.includes("const stagedRows={}") &&
+    cloudLoaderSource.includes("if(companyId!==requestedCompanyId)throw new Error") &&
+    cloudLoaderSource.includes("for(const k of selected)store[k]=stagedRows[k]"),
+  "Cloud refreshes must stage all requested company data and commit only after every table succeeds",
+);
+assert.ok(
+  html.includes("const previousStore=Object.fromEntries(coreTables.map(key=>[key,store[key]]))") &&
+    html.includes("companyId=previousCompanyId;") &&
+    html.includes("await window.asatuliRouteByMembership()") &&
+    html.includes("window.stopAsatuliRealtimeSync?.()") &&
+    html.includes("تعذر تبديل الشركة؛ أعدنا الشركة السابقة وبياناتها"),
+  "Company switching must stop old realtime updates, reload the role route, and rollback company/data on failure",
+);
+
+// Execute the cloud loader with a fake Supabase client: a mid-refresh failure
+// must leave every old company array untouched, and a clean refresh commits all.
+function makeCloudQueryClient(company, failTable = null) {
+  return {
+    from(table) {
+      const query = {
+        select() { return query; },
+        eq(column, value) { assert.equal(column, "company_id"); assert.equal(value, company); return query; },
+        order(column, options) { assert.equal(column, "id"); assert.equal(options.ascending, true); return query; },
+        async range(from, to) {
+          assert.equal(from, 0);
+          assert.equal(to, 499);
+          if (table === failTable) return { data: null, error: new Error("simulated " + table + " read failure") };
+          return { data: [{ id: table + "-" + company, company_id: company }], error: null };
+        },
+      };
+      return query;
+    },
+  };
+}
+const loaderStore = Object.fromEntries(["vehicles","drivers","fuel","maintenance","trips"].map(
+  key => [key, [{ id: "previous-" + key, company_id: "company-previous" }]],
+));
+const previousRows = Object.fromEntries(Object.entries(loaderStore));
+const loaderContext = { companyId: "company-next" };
+const executeCloudLoader = new Function(
+  "sb", "companyId", "store",
+  cloudLoaderSource + "; return loadCloud;",
+);
+const failingLoader = executeCloudLoader(
+  makeCloudQueryClient(loaderContext.companyId, "maintenance"),
+  loaderContext.companyId,
+  loaderStore,
+);
+await assert.rejects(failingLoader(), /simulated maintenance read failure/,
+  "A table read error during company refresh must be surfaced");
+for (const key of ["vehicles","drivers","fuel","maintenance","trips"]) {
+  assert.equal(loaderStore[key], previousRows[key],
+    "A failed full refresh must not partially replace " + key + " from the previous company");
+}
+const successfulLoader = executeCloudLoader(
+  makeCloudQueryClient(loaderContext.companyId),
+  loaderContext.companyId,
+  loaderStore,
+);
+await successfulLoader();
+for (const key of ["vehicles","drivers","fuel","maintenance","trips"]) {
+  assert.equal(loaderStore[key][0].company_id, "company-next",
+    "A successful full refresh must commit " + key + " for the requested company");
+}
+
 assert.ok(
   !driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'viewer')"),
   "Employee approval must not create a generic viewer instead of a driver",
