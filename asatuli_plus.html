@@ -730,6 +730,9 @@ async function switchCompany(){
   await loadCloud();
   window.asatuliRefreshScopedLocalData?.();
   await refreshAuditOwnerUI();
+  // Tear down any prior driver portal so a driver-to-driver company switch
+  // cannot reuse the previous company's captured vehicle and display state.
+  if(typeof window.asatuliShowManagerDashboard==='function')window.asatuliShowManagerDashboard();
   if(typeof window.asatuliRouteByMembership==='function')await window.asatuliRouteByMembership();
   render();
   renderMonthlyReport();
