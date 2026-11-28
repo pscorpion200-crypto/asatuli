@@ -65,6 +65,8 @@ Use two test users and, where possible, two test companies in the same browser p
 - Confirm a production Supabase URL is rejected from the `deploy-preview-*.netlify.app` origin.
 - Confirm the preview can connect using only the dedicated branch URL/key and test-only users.
 - Confirm GitHub Pages deployment remains blocked unless the static checker and both Deno checks pass.
+- Keep the repository variable `ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY` unset/false until the production migration `20261128082200_driver_operational_submission_idempotency.sql` is approved, applied, and verified to create both `submission_id` columns and both partial unique indexes.
+- Only after that verification, set the repository variable to the literal `true` and trigger the GitHub Pages workflow on `main`. The deployment job is intentionally skipped while the variable is not true.
 - Do not merge or publish to production until all checks pass and the migration has been reviewed and explicitly approved.
 
 ## Current limitation
