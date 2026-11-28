@@ -31,6 +31,10 @@ const tripSubmissionIdempotencyMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127223849_trip_submission_idempotency.sql"),
   "utf8",
 );
+const driverRecordIdempotencyMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128110000_driver_operational_submission_idempotency.sql"),
+  "utf8",
+);
 const fleetOptimisticLockMigration = readFileSync(
   resolve(root, "supabase/migrations/20261128042012_fleet_record_optimistic_locking.sql"),
   "utf8",
@@ -380,6 +384,44 @@ assert.ok(
     tripSubmissionIdempotencyMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS trips_company_driver_submission_unique") &&
     tripSubmissionIdempotencyMigration.includes("WHERE submission_id IS NOT NULL"),
   "Trip submission ids must have a nullable, company/driver-scoped unique index",
+);
+assert.ok(
+  driverRecordIdempotencyMigration.includes("ALTER TABLE public.fuel") &&
+    driverRecordIdempotencyMigration.includes("ALTER TABLE public.maintenance") &&
+    driverRecordIdempotencyMigration.includes("fuel_company_vehicle_submission_unique") &&
+    driverRecordIdempotencyMigration.includes("maintenance_company_vehicle_submission_unique") &&
+    (driverRecordIdempotencyMigration.match(/ADD COLUMN IF NOT EXISTS submission_id uuid/g) || []).length === 2,
+  "Driver fuel, maintenance and oil rows must use nullable submission ids protected by company/vehicle unique indexes",
+);
+assert.ok(
+  html.includes("async function saveDriverRecordIdempotently(table,formKey,payload)") &&
+    html.includes(".insert({...payload,submission_id:submissionId})") &&
+    html.includes("inserted.error.code!=='23505'") &&
+    html.includes(".eq('submission_id',submissionId)") &&
+    html.includes("localStorage.removeItem(storageKey)"),
+  "Driver operational writes must reuse a pending idempotency key after ambiguous network outcomes",
+);
+for (const handler of ["dpFuelSave", "dpMaintSave", "dpOilSave"]) {
+  const handlerStart = html.indexOf("document.getElementById('" + handler + "').onclick=async()=>");
+  assert.ok(handlerStart >= 0 && html.indexOf("button.disabled=true;", handlerStart) > handlerStart,
+    "Driver operation button must block concurrent submissions: " + handler);
+}
+assert.ok(
+  html.includes("if(!day||!litersText||!priceText||!Number.isFinite(liters)||liters<=0||!Number.isFinite(price)||price<0") &&
+    html.includes("يمكن أن يكون مبلغ التعبئة صفراً"),
+  "Driver fuel entry must permit the database-supported zero price while requiring positive liters",
+);
+assert.ok(
+  html.includes("[x.insurance,x.license,x.next_maint].some(v=>v&&!validDate(v))") &&
+    html.includes("numeric(x.liters,false)") &&
+    html.includes("numeric(x.km,false)") &&
+    !html.includes("[x.insurance_exp,x.license_exp,x.next_maintenance].some"),
+  "Data-quality checks must match vehicle columns and positive fuel/trip constraints",
+);
+assert.ok(
+  html.includes("if(inviteError)console.warn(") &&
+    html.includes("if(inviteError)throw new Error('تم تسجيل الدخول لكن تعذرت معالجة الدعوة: '+inviteError.message)"),
+  "A failed invite RPC must not block an account that already has a company membership",
 );
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
