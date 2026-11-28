@@ -379,11 +379,12 @@ async function connectAndAuth(mode){
   if(loginError)throw loginError;
 
   const {error:inviteError}=await sb.rpc('accept_member_invites');
-  if(inviteError)throw new Error('تم تسجيل الدخول، لكن تعذر معالجة دعوة الشركة: '+inviteError.message);
+  if(inviteError)console.warn('Asatuli invite acceptance could not be completed; existing membership will still be checked.',inviteError);
 
   const {data:members,error:membersError}=await sb.from('members').select('company_id').order('company_id');
   if(membersError)throw membersError;
   if(!members?.length){
+   if(inviteError)throw new Error('تم تسجيل الدخول لكن تعذرت معالجة الدعوة: '+inviteError.message);
    throw new Error('هذا الحساب غير مرتبط بشركة في أسطولي. اطلب من مالك الشركة إرسال دعوة أو ربط حسابك. لم يتم إنشاء شركة جديدة.');
   }
   const ids=[...new Set(members.map(x=>x.company_id))];
@@ -705,11 +706,87 @@ const pendingTripStorageKey='asatuli:pending-trip:'+companyId+':'+vehicle.id+':'
 let pendingTripSubmissionId=localStorage.getItem(pendingTripStorageKey)||'';
 let pendingTripSnapshot='';
 function resetPendingTripSubmission(){pendingTripSubmissionId='';pendingTripSnapshot='';localStorage.removeItem(pendingTripStorageKey);}
+async function saveDriverRecordIdempotently(table,formKey,payload){
+ if(!sb||!companyId||!uid)throw new Error('جلسة السائق غير جاهزة. سجّل الدخول مرة أخرى.');
+ if(!globalThis.crypto||typeof globalThis.crypto.randomUUID!=='function')throw new Error('حدّث المتصفح حتى نتمكن من منع تكرار العملية.');
+ const storageKey='asatuli:pending-driver-record:'+companyId+':'+vehicle.id+':'+uid+':'+table+':'+formKey;
+ const snapshot=JSON.stringify(payload);
+ let pending=null;
+ try{pending=JSON.parse(localStorage.getItem(storageKey)||'null');}catch(error){console.warn('Invalid pending driver operation cache',error);}
+ if(!pending||typeof pending.id!=='string'||pending.snapshot!==snapshot){
+  pending={id:globalThis.crypto.randomUUID(),snapshot};
+  localStorage.setItem(storageKey,JSON.stringify(pending));
+ }
+ const submissionId=pending.id;
+ const inserted=await sb.from(table).insert({...payload,submission_id:submissionId}).select('id');
+ let savedRow=inserted.data?.[0]||null;
+ if(inserted.error){
+  if(inserted.error.code!=='23505')throw inserted.error;
+  const duplicate=await sb.from(table).select('id')
+   .eq('company_id',payload.company_id)
+   .eq('vehicle_id',payload.vehicle_id)
+   .eq('submission_id',submissionId)
+   .maybeSingle();
+  if(duplicate.error)throw duplicate.error;
+  if(!duplicate.data)throw inserted.error;
+  savedRow=duplicate.data;
+ }
+ if(!savedRow)throw new Error('لم يتم تأكيد حفظ العملية في قاعدة البيانات. أعد المحاولة بنفس البيانات لتجنب التكرار.');
+ localStorage.removeItem(storageKey);
+ try{await loadCloud(table);}catch(refreshError){console.warn('Driver record saved, but immediate table refresh failed',refreshError);}
+ return savedRow;
+}
 function showDriverView(view){const home=document.getElementById('dpHome');if(home)home.style.display=view==='home'?'block':'none';document.querySelectorAll('#asatuliDriverPortal .dp-module').forEach(el=>{el.classList.toggle('active',el.id==='dpView'+({fuel:'Fuel',maint:'Maint',oil:'Oil',trip:'Trip'}[view]||''));});status.textContent='';portal.scrollIntoView({behavior:'smooth',block:'start'});}
 portal.querySelectorAll('[data-dp-view]').forEach(b=>b.addEventListener('click',()=>showDriverView(b.dataset.dpView)));
 portal.querySelectorAll('[data-dp-back]').forEach(b=>b.addEventListener('click',()=>showDriverView('home')));
-document.getElementById('dpFuelSave').onclick=async()=>{try{const liters=Number(document.getElementById('dpFuelLiters').value),price=Number(document.getElementById('dpFuelPrice').value),odo=Number(document.getElementById('dpFuelOdo').value);if(!document.getElementById('dpFuelDay').value||!liters||!price)throw Error('أدخل التاريخ واللترات والمبلغ');const {data:savedRows,error}=await sb.from('fuel').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpFuelDay').value,liters,price,odometer:odo||null,notes:document.getElementById('dpFuelNotes').value||null}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ التعبئة في قاعدة البيانات');status.textContent='تم حفظ التعبئة بنجاح.';alert('تم حفظ التعبئة بنجاح!');['dpFuelLiters','dpFuelPrice','dpFuelOdo','dpFuelNotes'].forEach(id=>document.getElementById(id).value='');}catch(e){status.textContent='تعذر الحفظ: '+(e.message||e);alert('تعذر حفظ التعبئة: '+(e.message||e));}};
-document.getElementById('dpMaintSave').onclick=async()=>{try{const descr=document.getElementById('dpMaintDescr').value.trim(),cost=Number(document.getElementById('dpMaintCost').value);if(!descr||!document.getElementById('dpMaintDay').value||!Number.isFinite(cost))throw Error('أدخل التاريخ والوصف والكلفة');const {data:savedRows,error}=await sb.from('maintenance').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpMaintDay').value,descr,cost,next_date:document.getElementById('dpMaintNext').value||null,attachments:[],notes:document.getElementById('dpMaintNotes').value||null}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ الصيانة في قاعدة البيانات');status.textContent='✅ تم حفظ الصيانة بنجاح.';alert('تم حفظ الصيانة بنجاح!');document.getElementById('dpMaintDescr').value='';document.getElementById('dpMaintCost').value='';}catch(e){status.textContent='❌ تعذر حفظ الصيانة: '+(e.message||e);alert('تعذر حفظ الصيانة: '+(e.message||e));}};document.getElementById('dpTripSave').onclick=async()=>{
+document.getElementById('dpFuelSave').onclick=async()=>{
+ const button=document.getElementById('dpFuelSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const day=document.getElementById('dpFuelDay').value;
+  const litersText=document.getElementById('dpFuelLiters').value.trim();
+  const priceText=document.getElementById('dpFuelPrice').value.trim();
+  const odoText=document.getElementById('dpFuelOdo').value.trim();
+  const liters=Number(litersText),price=Number(priceText),odo=Number(odoText);
+  if(!day||!litersText||!priceText||!Number.isFinite(liters)||liters<=0||!Number.isFinite(price)||price<0||
+     (odoText!==''&&(!Number.isFinite(odo)||odo<0)))throw Error('أدخل التاريخ واللترات والمبلغ بشكل صحيح. يمكن أن يكون مبلغ التعبئة صفراً.');
+  await saveDriverRecordIdempotently('fuel','fuel',{
+   company_id:companyId,vehicle_id:vehicle.id,day,liters,price,
+   odometer:odoText===''?null:odo,notes:document.getElementById('dpFuelNotes').value||null
+  });
+  status.textContent='تم حفظ التعبئة بنجاح.';
+  alert('تم حفظ التعبئة بنجاح!');
+  ['dpFuelLiters','dpFuelPrice','dpFuelOdo','dpFuelNotes'].forEach(id=>document.getElementById(id).value='');
+ }catch(e){
+  status.textContent='تعذر الحفظ: '+(e.message||e);
+  alert('تعذر حفظ التعبئة: '+(e.message||e));
+ }finally{button.disabled=false;}
+};
+document.getElementById('dpMaintSave').onclick=async()=>{
+ const button=document.getElementById('dpMaintSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const descr=document.getElementById('dpMaintDescr').value.trim();
+  const day=document.getElementById('dpMaintDay').value;
+  const costText=document.getElementById('dpMaintCost').value.trim();
+  const cost=Number(costText);
+  if(!descr||!day||costText===''||!Number.isFinite(cost)||cost<0)throw Error('أدخل التاريخ والوصف والكلفة بشكل صحيح.');
+  await saveDriverRecordIdempotently('maintenance','maintenance',{
+   company_id:companyId,vehicle_id:vehicle.id,day,descr,cost,
+   next_date:document.getElementById('dpMaintNext').value||null,
+   attachments:[],notes:document.getElementById('dpMaintNotes').value||null
+  });
+  status.textContent='✅ تم حفظ الصيانة بنجاح.';
+  alert('تم حفظ الصيانة بنجاح!');
+  document.getElementById('dpMaintDescr').value='';
+  document.getElementById('dpMaintCost').value='';
+ }catch(e){
+  status.textContent='❌ تعذر حفظ الصيانة: '+(e.message||e);
+  alert('تعذر حفظ الصيانة: '+(e.message||e));
+ }finally{button.disabled=false;}
+};document.getElementById('dpTripSave').onclick=async()=>{
 if(tripSubmitButton.disabled)return;
 tripSubmitButton.disabled=true;
 tripFormFields.forEach(field=>field.disabled=true);
@@ -770,7 +847,33 @@ status.textContent='❌ تعذر حفظ الرحلة: '+(e.message||String(e));a
  tripSubmitButton.disabled=false;
  tripFormFields.forEach(field=>field.disabled=false);
 }
-};document.getElementById('dpOilSave').onclick=async()=>{try{const day=document.getElementById('dpOilDay').value,type=document.getElementById('dpOilType').value.trim(),odo=Number(document.getElementById('dpOilOdo').value),cost=Number(document.getElementById('dpOilCost').value),nextOdo=document.getElementById('dpOilNextOdo').value,notes=document.getElementById('dpOilNotes').value.trim();if(!day||!type||!Number.isFinite(odo)||odo<0||!Number.isFinite(cost)||cost<0)throw Error('أدخل التاريخ ونوع الزيت والعداد والكلفة بشكل صحيح');const oilNotes='عداد وقت التغيير: '+odo+' كم'+(nextOdo?' | العداد القادم: '+nextOdo+' كم':'')+(notes?' | '+notes:'');const {data:savedRows,error}=await sb.from('maintenance').insert({company_id:companyId,vehicle_id:vehicle.id,day,descr:'تغيير زيت المحرك - '+type,cost,next_date:null,attachments:[],notes:oilNotes}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ تغيير الزيت في قاعدة البيانات');status.textContent='✅ تم تسجيل تغيير الزيت بنجاح.';alert('تم تسجيل تغيير الزيت بنجاح!');['dpOilType','dpOilOdo','dpOilCost','dpOilNextOdo','dpOilNotes'].forEach(id=>document.getElementById(id).value='');}catch(e){status.textContent='تعذر تسجيل تغيير الزيت: '+(e.message||e)}};document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
+};document.getElementById('dpOilSave').onclick=async()=>{
+ const button=document.getElementById('dpOilSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const day=document.getElementById('dpOilDay').value;
+  const type=document.getElementById('dpOilType').value.trim();
+  const odoText=document.getElementById('dpOilOdo').value.trim();
+  const costText=document.getElementById('dpOilCost').value.trim();
+  const odo=Number(odoText),cost=Number(costText);
+  const nextOdo=document.getElementById('dpOilNextOdo').value;
+  const notes=document.getElementById('dpOilNotes').value.trim();
+  if(!day||!type||odoText===''||costText===''||!Number.isFinite(odo)||odo<0||!Number.isFinite(cost)||cost<0)
+   throw Error('أدخل التاريخ ونوع الزيت والعداد والكلفة بشكل صحيح.');
+  const oilNotes='عداد وقت التغيير: '+odo+' كم'+(nextOdo?' | العداد القادم: '+nextOdo+' كم':'')+(notes?' | '+notes:'');
+  await saveDriverRecordIdempotently('maintenance','oil',{
+   company_id:companyId,vehicle_id:vehicle.id,day,
+   descr:'تغيير زيت المحرك - '+type,cost,next_date:null,attachments:[],notes:oilNotes
+  });
+  status.textContent='✅ تم تسجيل تغيير الزيت بنجاح.';
+  alert('تم تسجيل تغيير الزيت بنجاح!');
+  ['dpOilType','dpOilOdo','dpOilCost','dpOilNextOdo','dpOilNotes'].forEach(id=>document.getElementById(id).value='');
+ }catch(e){
+  status.textContent='تعذر تسجيل تغيير الزيت: '+(e.message||e);
+  alert('تعذر تسجيل تغيير الزيت: '+(e.message||e));
+ }finally{button.disabled=false;}
+};document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
 }catch(e){console.warn('Driver portal bootstrap',e);if(driverMode){const fallback=document.createElement('section');fallback.id='asatuliDriverPortalError';fallback.style.cssText='max-width:640px;margin:24px auto;padding:20px;background:#fff;border:1px solid #ddd;border-radius:14px;color:#222';fallback.innerHTML='<h2>بوابة السائق</h2><p>'+escHTML(e?.message||'تعذر تحميل بيانات السائق')+'</p><button id="dpErrorLogout" style="padding:12px 18px;background:#a83238;color:#fff;border:0;border-radius:10px">تسجيل خروج</button>';document.body.appendChild(fallback);document.getElementById('dpErrorLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};}}};
 </script>
 
@@ -792,11 +895,11 @@ status.textContent='❌ تعذر حفظ الرحلة: '+(e.message||String(e));a
   add('المركبات (حقول ناقصة)',store.vehicles.filter(x=>!String(x.plate||'').trim()||!String(x.type||'').trim()).map(x=>x.plate||('مركبة '+(x.id||''))));
   add('لوحات مكررة',[...new Set(dupPlates)]);
   add('السائقون (حقول ناقصة)',store.drivers.filter(x=>!String(x.name||'').trim()||!x.license_exp).map(x=>x.name||('سائق '+(x.id||''))));
-  add('تواريخ غير صحيحة — المركبات',store.vehicles.filter(x=>[x.insurance_exp,x.license_exp,x.next_maintenance].some(v=>v&&!validDate(v))).map(x=>x.plate||('مركبة '+(x.id||''))));
+  add('تواريخ غير صحيحة — المركبات',store.vehicles.filter(x=>[x.insurance,x.license,x.next_maint].some(v=>v&&!validDate(v))).map(x=>x.plate||('مركبة '+(x.id||''))));
   add('تواريخ غير صحيحة — السائقون',store.drivers.filter(x=>[x.license_exp,x.id_exp].some(v=>v&&!validDate(v))).map(x=>x.name||('سائق '+(x.id||''))));
-  add('الوقود (بيانات ناقصة أو غير صحيحة)',store.fuel.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.liters)||!numeric(x.price)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
+  add('الوقود (بيانات ناقصة أو غير صحيحة)',store.fuel.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.liters,false)||!numeric(x.price)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
   add('الصيانة (بيانات ناقصة أو غير صحيحة)',store.maintenance.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
-  add('الرحلات (بيانات ناقصة أو غير صحيحة)',store.trips.filter(x=>!validDate(x.day)||!x.vehicle_id||!x.driver_id||!numeric(x.km)||!numeric(x.revenue)||!numeric(x.other_cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
+  add('الرحلات (بيانات ناقصة أو غير صحيحة)',store.trips.filter(x=>!validDate(x.day)||!x.vehicle_id||!x.driver_id||!numeric(x.km,false)||!numeric(x.revenue)||!numeric(x.other_cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
   const total=issues.length;return `<div class="sub">${total?`<strong>يوجد ${total} نوع من التنبيهات المتعلقة بجودة البيانات.</strong><ul>${issues.join('')}</ul>`:'<strong>ممتاز! لم تظهر نواقص أو مخالفات واضحة في الفحوص المحددة.</strong>'}<p>هذه مراجعة للحقول المحددة فقط، ولا تعدّل السجلات تلقائياً. قد تحتاج البيانات القديمة مراجعة يدوية.</p></div>`;
  }
  render=function(){baseRender();const box=document.getElementById('dataQuality');if(box)box.innerHTML='<h2>🔎 جودة واكتمال البيانات</h2>'+qualityHTML();};
