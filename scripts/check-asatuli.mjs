@@ -56,6 +56,10 @@ const removedMemberAccessMigration = readFileSync(
   "utf8",
 );
 const edgeConfig = readFileSync(resolve(root, "supabase/config.toml"), "utf8");
+const operationsReadme = readFileSync(
+  resolve(root, "supabase/operations/README.md"),
+  "utf8",
+);
 const unusedRpcRevocationMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127185742_revoke_unused_legacy_rpc_endpoints.sql"),
   "utf8",
@@ -968,6 +972,13 @@ assert.ok(
   removedMemberAccessMigration.includes("CREATE POLICY trip_invoice_read_company") &&
     removedMemberAccessMigration.includes("m.user_id = (SELECT auth.uid())"),
   "Trip invoice reads must be restricted to current company members",
+);
+
+assert.ok(
+  operationsReadme.includes("## SECURITY DEFINER advisory review") &&
+    operationsReadme.includes("Do not blanket-revoke") &&
+    operationsReadme.includes("leaked-password protection"),
+  "Operations guidance must document the reviewed SECURITY DEFINER warnings and the Auth hardening follow-up",
 );
 
 assert.ok(policy.includes("CREATE POLICY trip_invoice_upload_assigned_driver"), "Assigned-driver upload policy is missing");
