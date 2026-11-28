@@ -31,6 +31,14 @@ const tripSubmissionIdempotencyMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127223849_trip_submission_idempotency.sql"),
   "utf8",
 );
+const driverRecordIdempotencyMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128105009_driver_operational_submission_idempotency.sql"),
+  "utf8",
+);
+const assignedDriverAccessMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128105014_require_driver_role_for_assigned_vehicle_access.sql"),
+  "utf8",
+);
 const fleetOptimisticLockMigration = readFileSync(
   resolve(root, "supabase/migrations/20261128042012_fleet_record_optimistic_locking.sql"),
   "utf8",
@@ -52,6 +60,14 @@ const removedMemberAccessMigration = readFileSync(
   "utf8",
 );
 const edgeConfig = readFileSync(resolve(root, "supabase/config.toml"), "utf8");
+const operationsReadme = readFileSync(
+  resolve(root, "supabase/operations/README.md"),
+  "utf8",
+);
+const deployWorkflow = readFileSync(
+  resolve(root, ".github/workflows/deploy-pages.yml"),
+  "utf8",
+);
 const unusedRpcRevocationMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127185742_revoke_unused_legacy_rpc_endpoints.sql"),
   "utf8",
@@ -381,6 +397,407 @@ assert.ok(
     tripSubmissionIdempotencyMigration.includes("WHERE submission_id IS NOT NULL"),
   "Trip submission ids must have a nullable, company/driver-scoped unique index",
 );
+assert.ok(
+  assignedDriverAccessMigration.includes("CREATE OR REPLACE FUNCTION public.employee_assigned_vehicle") &&
+    assignedDriverAccessMigration.includes("SET search_path = pg_catalog, public, pg_temp") &&
+    assignedDriverAccessMigration.includes("SECURITY DEFINER") &&
+    assignedDriverAccessMigration.includes("AND m.role = 'driver'"),
+  "Vehicle-assignment RLS helper must grant assigned-vehicle access only to active driver memberships",
+);
+assert.ok(
+  driverRecordIdempotencyMigration.includes("ALTER TABLE public.fuel") &&
+    driverRecordIdempotencyMigration.includes("ALTER TABLE public.maintenance") &&
+    driverRecordIdempotencyMigration.includes("fuel_company_vehicle_submission_unique") &&
+    driverRecordIdempotencyMigration.includes("maintenance_company_vehicle_submission_unique") &&
+    (driverRecordIdempotencyMigration.match(/ADD COLUMN IF NOT EXISTS submission_id uuid/g) || []).length === 2,
+  "Driver fuel, maintenance and oil rows must use nullable submission ids protected by company/vehicle unique indexes",
+);
+assert.ok(
+  html.includes("async function saveDriverRecordIdempotently(table,formKey,payload)") &&
+    html.includes(".insert({...payload,submission_id:submissionId})") &&
+    html.includes("inserted.error.code!=='23505'") &&
+    html.includes(".eq('submission_id',submissionId)") &&
+    html.includes("localStorage.removeItem(storageKey)"),
+  "Driver operational writes must reuse a pending idempotency key after ambiguous network outcomes",
+);
+assert.ok(
+  html.includes("function isAsatuliDeployPreview()") &&
+    html.includes("host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app')") &&
+    html.includes("function isAsatuliProductionApiUrl(url)") &&
+    html.includes("if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error(") &&
+    html.includes("savedProduction?'':(cfg.url||(preview?'':"),
+  "Netlify deploy previews must not default to or connect to the production Supabase project",
+);
+for (const handler of ["dpFuelSave", "dpMaintSave", "dpOilSave"]) {
+  const handlerStart = html.indexOf("document.getElementById('" + handler + "').onclick=async()=>");
+  assert.ok(handlerStart >= 0 && html.indexOf("button.disabled=true;", handlerStart) > handlerStart,
+    "Driver operation button must block concurrent submissions: " + handler);
+}
+assert.ok(
+  html.includes("if(!day||!litersText||!priceText||!Number.isFinite(liters)||liters<=0||!Number.isFinite(price)||price<0") &&
+    html.includes("يمكن أن يكون مبلغ التعبئة صفراً"),
+  "Driver fuel entry must permit the database-supported zero price while requiring positive liters",
+);
+const idempotencyHelperStart = html.indexOf("async function saveDriverRecordIdempotently(");
+const idempotencyHelperEnd = html.indexOf("\nfunction showDriverView(", idempotencyHelperStart);
+assert.ok(idempotencyHelperStart >= 0 && idempotencyHelperEnd > idempotencyHelperStart, "Driver idempotency helper source is missing");
+const idempotencyHelperSource = html.slice(idempotencyHelperStart, idempotencyHelperEnd);
+const pendingStorage = new Map();
+const fakeLocalStorage = {
+  getItem(key) { return pendingStorage.has(key) ? pendingStorage.get(key) : null; },
+  setItem(key, value) { pendingStorage.set(key, String(value)); },
+  removeItem(key) { pendingStorage.delete(key); },
+};
+let persistedDriverRow = null;
+let insertAttempts = 0;
+let refreshedTables = [];
+const fakeSupabase = {
+  from(table) {
+    return {
+      insert(record) {
+        insertAttempts += 1;
+        if (insertAttempts === 1) {
+          persistedDriverRow = { id: "row-confirmed-after-timeout", ...record, table };
+          return {
+            select: async () => ({
+              data: null,
+              error: { code: "NETWORK_ERROR", message: "simulated response timeout after commit" },
+            }),
+          };
+        }
+        return {
+          select: async () => ({
+            data: null,
+            error: { code: "23505", message: "duplicate idempotency key" },
+          }),
+        };
+      },
+      select() {
+        const filters = {};
+        const query = {
+          eq(column, value) { filters[column] = value; return query; },
+          async maybeSingle() {
+            const matches = persistedDriverRow &&
+              persistedDriverRow.table === table &&
+              Object.entries(filters).every(([column, value]) => persistedDriverRow[column] === value);
+            return { data: matches ? { id: persistedDriverRow.id } : null, error: null };
+          },
+        };
+        return query;
+      },
+    };
+  },
+};
+const buildIdempotentSave = new Function(
+  "sb", "companyId", "uid", "vehicle", "localStorage", "loadCloud", "console",
+  idempotencyHelperSource + "; return saveDriverRecordIdempotently;",
+);
+const simulatedRefresh = async (table) => { refreshedTables.push(table); };
+const idempotentSave = buildIdempotentSave(
+  fakeSupabase, "company-test", "driver-test", { id: "vehicle-test" },
+  fakeLocalStorage, simulatedRefresh, { warn() {} },
+);
+const retryPayload = {
+  company_id: "company-test",
+  vehicle_id: "vehicle-test",
+  day: "2026-11-28",
+  liters: 20,
+  price: 0,
+};
+let simulatedTimeoutSeen = false;
+try {
+  await idempotentSave("fuel", "fuel", retryPayload);
+} catch (error) {
+  simulatedTimeoutSeen = error.message.includes("simulated response timeout after commit");
+}
+assert.equal(simulatedTimeoutSeen, true, "A response timeout must be surfaced while retaining the pending idempotency key");
+assert.equal(pendingStorage.size, 1, "An ambiguous first attempt must keep its key in local storage for a retry");
+const pendingKey = [...pendingStorage.keys()][0];
+const pendingRaw = pendingStorage.get(pendingKey);
+let changedPayloadBlocked = false;
+try {
+  await idempotentSave("fuel", "fuel", { ...retryPayload, liters: 21 });
+} catch (error) {
+  changedPayloadBlocked = error.message.includes("أعد المحاولة بنفس البيانات أولاً");
+}
+assert.equal(changedPayloadBlocked, true, "Changing form values must not replace an unresolved idempotency key");
+assert.equal(insertAttempts, 1, "A changed payload must be blocked before another insert is attempted");
+assert.equal(pendingStorage.get(pendingKey), pendingRaw, "The unresolved key and original payload snapshot must remain untouched");
+pendingStorage.set(pendingKey, "not-json");
+let corruptPendingBlocked = false;
+try {
+  await idempotentSave("fuel", "fuel", retryPayload);
+} catch (error) {
+  corruptPendingBlocked = error.message.includes("مفتاح حماية عملية سابقة");
+}
+assert.equal(corruptPendingBlocked, true, "A corrupt pending key must block a new insert instead of silently generating a new key");
+assert.equal(insertAttempts, 1, "A corrupt pending key must not allow another insert");
+pendingStorage.set(pendingKey, pendingRaw);
+const confirmedRetry = await idempotentSave("fuel", "fuel", retryPayload);
+assert.equal(confirmedRetry.id, "row-confirmed-after-timeout", "A retry must resolve the previously committed row after a unique-key collision");
+assert.equal(insertAttempts, 2, "The retry must reuse the same key rather than creating another row");
+assert.equal(pendingStorage.size, 0, "A confirmed retry must clear the pending idempotency key");
+assert.deepEqual(refreshedTables, ["fuel"], "A confirmed operation must refresh only its affected table");
+
+assert.ok(
+  html.includes("[x.insurance,x.license,x.next_maint].some(v=>v&&!validDate(v))") &&
+    html.includes("numeric(x.liters,false)") &&
+    html.includes("numeric(x.km,false)") &&
+    !html.includes("[x.insurance_exp,x.license_exp,x.next_maintenance].some"),
+  "Data-quality checks must match vehicle columns and positive fuel/trip constraints",
+);
+assert.ok(
+  html.includes("extras.dailyChecklist[key]=localStorage.getItem(key)") &&
+    html.includes("extras.dailyChecklist['asatuli_daily_check_'+k.slice(dailyPrefix.length)]") &&
+    html.includes("for(const [key,value] of Object.entries(ex.dailyChecklist||{}))") &&
+    html.includes("for(const [k,v] of Object.entries(ex.dailyChecklist||{}))") &&
+    html.includes("key.startsWith(fleetLocalStorageKey('asatuli_daily_check_'))"),
+  "Daily preparation checklists must survive legacy export, scoped backup/restore, local/demo restore, and rollback",
+);
+assert.ok(
+  html.includes("fleetLocalGetItem('asatuli_budget')") &&
+    html.includes("fleetLocalStorageKey('asatuli_dispatch_check_'+dateKey())") &&
+    html.includes("fleetLocalStorageKey('asatuli_daily_check_'+localDateKey())") &&
+    html.includes("fleetLocalGetItem('asatuli_inspections')") &&
+    html.includes("fleetLocalGetItem('asatuli_incidents')") &&
+    html.includes("fleetLocalStorageKey('asatuli_handover_notes_v1')"),
+  "Supplementary local records must use a user/company-scoped storage namespace",
+);
+const scopeStart = html.indexOf("function fleetLocalStorageScopePrefix(){");
+const scopeEnd = html.indexOf("\nfunction fleetLocalStorageKey", scopeStart);
+assert.ok(scopeStart >= 0 && scopeEnd > scopeStart, "Local storage scope resolver is missing");
+const scopeResolverSource = html.slice(scopeStart, scopeEnd);
+const buildScopeResolver = new Function(
+  "cloudMode", "companyId", "cloudUserId",
+  scopeResolverSource + "; return fleetLocalStorageScopePrefix;",
+);
+assert.equal(buildScopeResolver(false, null, null)(), "", "Local/demo mode must retain its existing device storage namespace");
+assert.equal(
+  buildScopeResolver(true, "company-A", "user-A")(),
+  "asatuli:scope:company-A:user-A:",
+  "Cloud-mode local records must be isolated by both company and user",
+);
+assert.ok(
+  html.includes("fleetLocalSetItem('asatuli_incidents',JSON.stringify(records().filter(x=>x.id!==id)))") &&
+    html.includes("fleetLocalSetItem('asatuli_inspections',JSON.stringify(arr))") &&
+    html.includes("fleetLocalSetItem('asatuli_budget',String(val))"),
+  "Supplementary record edits and deletes must write only to the active scoped namespace",
+);
+assert.throws(
+  () => buildScopeResolver(true, "company-A", null)(),
+  /تعذر تحديد حساب وشركة/,
+  "Cloud-mode local records must fail closed if the authenticated user identity is missing",
+);
+assert.ok(
+  html.includes("window.exportAsatuliLegacyLocalData=function()") &&
+    html.includes("تم إخفاؤه عن هذه الجلسة") &&
+    html.includes("لم يتم حذفه أو نقله"),
+  "Unassigned legacy records must remain preserved and exportable rather than being silently assigned to a new account",
+);
+assert.ok(
+  html.includes("local_scope:cloudMode?{company_id:companyId,user_id:cloudUserId}:null") &&
+    html.includes("function restoreScopedLocalExtras(parsed)") &&
+    html.includes("scope.company_id!==companyId||scope.user_id!==cloudUserId") &&
+    html.includes("fleetLocalSetItem('asatuli_inspections'") &&
+    html.includes("لم يتم تعديل سجلات التشغيل السحابية"),
+  "Scoped backups must restore supplementary records only into the exact matching account/company namespace",
+);
+assert.ok(
+  html.includes("restoreScopedLocalExtras(parsed)") &&
+    html.includes("window.asatuliRefreshScopedLocalData?.()"),
+  "Scoped local data restoration must refresh active local modules after successful restoration",
+);
+assert.ok(
+  html.includes("function isAsatuliDeployPreview()") &&
+    html.includes("host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app')") &&
+    html.includes("function isAsatuliProductionApiUrl(url)") &&
+    html.includes("if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error(") &&
+    html.includes("savedProduction?'':(cfg.url||(preview?'':"),
+  "Netlify deploy previews must not default to or connect to the production Supabase project",
+);
+const previewHelpersStart = html.indexOf("function isAsatuliDeployPreview(){");
+const previewHelpersEnd = html.indexOf("function openConnect(){", previewHelpersStart);
+assert.ok(previewHelpersStart >= 0 && previewHelpersEnd > previewHelpersStart, "Preview safety helpers are missing");
+const previewHelpers = html.slice(previewHelpersStart, previewHelpersEnd);
+const buildPreviewHelpers = new Function("location", previewHelpers + "; return {isAsatuliDeployPreview,isAsatuliProductionApiUrl};");
+const netlifyPreview = buildPreviewHelpers({ hostname: "deploy-preview-14--asatuli.netlify.app" });
+assert.equal(netlifyPreview.isAsatuliDeployPreview(), true, "Netlify deploy preview hostname must be detected");
+assert.equal(netlifyPreview.isAsatuliProductionApiUrl("https://aicvzcxrakhzlcfosvsx.supabase.co"), true,
+  "Production Supabase URL must be identified");
+assert.equal(netlifyPreview.isAsatuliProductionApiUrl("https://test-branch.supabase.co"), false,
+  "A branch-specific Supabase URL must not be mistaken for production");
+assert.equal(buildPreviewHelpers({ hostname: "asatuli.netlify.app" }).isAsatuliDeployPreview(), false,
+  "The production Netlify hostname must not be treated as a deploy preview");
+
+const scopedRestoreStart = html.indexOf("function restoreScopedLocalExtras(parsed){");
+const scopedRestoreEnd = html.indexOf("\nfunction restoreJSON(event){", scopedRestoreStart);
+assert.ok(scopedRestoreStart >= 0 && scopedRestoreEnd > scopedRestoreStart, "Scoped local restore function is missing");
+const scopedRestoreSource = html.slice(scopedRestoreStart, scopedRestoreEnd);
+const scopedCompany = "company-test-A";
+const scopedUser = "user-test-A";
+const scopedPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
+const restoreData = new Map([
+  ["asatuli_inspections", JSON.stringify([{ id: "legacy-device-inspection" }])],
+  [scopedPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: true, 1: false })],
+  [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "old-scoped-inspection" }])],
+  [scopedPrefix + "asatuli_incidents", JSON.stringify([{ id: "old-scoped-incident" }])],
+  [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "old", text: "Old", done: false }] })],
+]);
+let refreshCount = 0;
+let successAlerts = 0;
+let restoreConfirm = true;
+const makeLocalStorageMock = (data, failKey = null) => {
+  let shouldFail = Boolean(failKey);
+  return {
+    get length() { return data.size; },
+    key(index) { return [...data.keys()][index] ?? null; },
+    getItem(key) { return data.has(key) ? data.get(key) : null; },
+    setItem(key, value) {
+      if (shouldFail && key === failKey) { shouldFail = false; throw new Error("simulated local storage quota failure"); }
+      data.set(key, String(value));
+    },
+    removeItem(key) { data.delete(key); },
+  };
+};
+const localStorageMock = makeLocalStorageMock(restoreData);
+const restoreStorageKey = (key) => scopedPrefix + key;
+const restoreSetItem = (key, value) => localStorageMock.setItem(restoreStorageKey(key), value);
+const restoreRemoveItem = (key) => localStorageMock.removeItem(restoreStorageKey(key));
+const restoreWindow = { asatuliRefreshScopedLocalData() { refreshCount += 1; } };
+const restoreFunctionFactory = new Function(
+  "companyId", "cloudUserId", "confirm", "localStorage", "fleetLocalStorageKey",
+  "fleetLocalSetItem", "fleetLocalRemoveItem", "window", "alert",
+  scopedRestoreSource + "; return restoreScopedLocalExtras;",
+);
+const restoreForUserA = restoreFunctionFactory(
+  scopedCompany, scopedUser, () => restoreConfirm, localStorageMock,
+  restoreStorageKey, restoreSetItem, restoreRemoveItem, restoreWindow,
+  () => { successAlerts += 1; },
+);
+const wrongOwnerBackup = {
+  local_scope: { company_id: scopedCompany, user_id: "user-test-B" },
+  extras: { asatuli_inspections: [{ id: "must-not-import" }] },
+};
+const beforeWrongOwnerRestore = new Map(restoreData);
+assert.throws(() => restoreForUserA(wrongOwnerBackup), /هذه النسخة ليست مرتبطة بالحساب/,
+  "A backup from a different user must be rejected");
+assert.deepEqual([...restoreData.entries()], [...beforeWrongOwnerRestore.entries()],
+  "A rejected cross-user backup must not change any local storage key");
+
+const validScopedBackup = {
+  local_scope: { company_id: scopedCompany, user_id: scopedUser },
+  extras: {
+    asatuli_inspections: [{ id: "new-inspection" }],
+    asatuli_incidents: [{ id: "new-incident" }],
+    handover: [{ type: "ملاحظة", text: "new handover" }],
+    dispatchDaily: {
+      "asatuli_dispatch_check_2026-11-28": JSON.stringify({ tasks: [{ id: "new", text: "New", done: true }] }),
+    },
+    dailyChecklist: {
+      "asatuli_daily_check_2026-11-28": JSON.stringify({ 0: true, 2: true }),
+    },
+    budgets: { asatuli_budget: "125", asatuli_vehicle_budgets: "{\"vehicle-A\":75}" },
+  },
+};
+restoreForUserA(validScopedBackup);
+assert.equal(JSON.parse(restoreData.get(scopedPrefix + "asatuli_inspections"))[0].id, "new-inspection",
+  "Valid same-user/company restore must replace the scoped inspection data");
+assert.equal(JSON.parse(restoreData.get(scopedPrefix + "asatuli_incidents"))[0].id, "new-incident",
+  "Valid same-user/company restore must replace the scoped incident data");
+assert.equal(restoreData.get("asatuli_inspections"), JSON.stringify([{ id: "legacy-device-inspection" }]),
+  "Legacy unscoped data must remain untouched by scoped restore");
+assert.deepEqual(JSON.parse(restoreData.get(scopedPrefix + "asatuli_daily_check_2026-11-28")), { 0: true, 2: true },
+  "Valid same-user/company restore must restore the daily preparation checklist");
+assert.equal(restoreData.get(scopedPrefix + "asatuli_budget"), "125",
+  "Valid same-user/company restore must restore scoped budgets");
+assert.equal(refreshCount, 1, "Successful scoped restore must refresh current panels");
+
+assert.equal(successAlerts, 1, "Successful scoped restore must report completion");
+
+// Execute the actual backup builder with isolated browser shims to verify daily
+// checklists are serialized under the correct account/company namespace.
+const backupStart = html.indexOf("function backupJSON(){");
+const backupEnd = html.indexOf("\nfunction restoreScopedLocalExtras(", backupStart);
+assert.ok(backupStart >= 0 && backupEnd > backupStart, "Backup builder source is missing");
+const backupSource = html.slice(backupStart, backupEnd);
+const scopedBackupPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
+const backupEntries = new Map([
+  [scopedBackupPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: true, 3: false })],
+  [scopedBackupPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "dispatch", done: true }] })],
+]);
+const backupStorage = {
+  get length() { return backupEntries.size; },
+  key(index) { return [...backupEntries.keys()][index] ?? null; },
+  getItem(key) { return backupEntries.get(key) ?? null; },
+};
+let capturedBackupBlob = null;
+let backupAnchorClicked = false;
+const backupURL = {
+  createObjectURL(blob) { capturedBackupBlob = blob; return "blob:asatuli-backup-test"; },
+  revokeObjectURL() {},
+};
+const backupDocument = {
+  createElement() { return { click() { backupAnchorClicked = true; } }; },
+};
+const backupKey = (key) => scopedBackupPrefix + key;
+const buildBackup = new Function(
+  "fleetLocalGetItem", "fleetLocalStorageKey", "localStorage", "cloudMode",
+  "companyId", "cloudUserId", "store", "Blob", "URL", "document", "setTimeout", "Date",
+  backupSource + "; return backupJSON;",
+)(
+  (key) => backupEntries.get(backupKey(key)) ?? null,
+  backupKey,
+  backupStorage,
+  true,
+  scopedCompany,
+  scopedUser,
+  { vehicles: [], drivers: [], fuel: [], maintenance: [], trips: [] },
+  Blob,
+  backupURL,
+  backupDocument,
+  () => 0,
+  Date,
+);
+buildBackup();
+assert.equal(backupAnchorClicked, true, "Cloud backup must trigger its download action");
+assert.ok(capturedBackupBlob, "Cloud backup must produce a JSON blob");
+const builtCloudBackup = JSON.parse(await capturedBackupBlob.text());
+assert.deepEqual(
+  JSON.parse(builtCloudBackup.extras.dailyChecklist["asatuli_daily_check_2026-11-28"]),
+  { 0: true, 3: false },
+  "Cloud backup must serialize the daily preparation checklist for the active scope",
+);
+assert.deepEqual(
+  builtCloudBackup.local_scope,
+  { company_id: scopedCompany, user_id: scopedUser },
+  "Cloud backup must retain its user/company binding",
+);
+
+
+const rollbackData = new Map([
+  [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "pre-restore-inspection" }])],
+  [scopedPrefix + "asatuli_budget", "88"],
+  [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] })],
+  [scopedPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: false, 4: true })],
+]);
+const rollbackStorage = makeLocalStorageMock(rollbackData, scopedPrefix + "asatuli_budget");
+const rollbackFunction = restoreFunctionFactory(
+  scopedCompany, scopedUser, () => true, rollbackStorage,
+  restoreStorageKey,
+  (key, value) => rollbackStorage.setItem(restoreStorageKey(key), value),
+  (key) => rollbackStorage.removeItem(restoreStorageKey(key)),
+  { asatuliRefreshScopedLocalData() {} }, () => {},
+);
+assert.throws(() => rollbackFunction(validScopedBackup), /تمت إعادة البيانات المحلية السابقة/,
+  "A failed scoped restore must report that rollback was attempted");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_inspections"), JSON.stringify([{ id: "pre-restore-inspection" }]),
+  "Rollback must restore the prior inspection records");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_budget"), "88",
+  "Rollback must restore the prior budget");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_dispatch_check_2026-11-28"), JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] }),
+  "Rollback must restore the prior dispatch checklist");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_daily_check_2026-11-28"), JSON.stringify({ 0: false, 4: true }),
+  "Rollback must restore the prior daily preparation checklist");
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
 const moduleAccessScriptEnd = html.indexOf("</script>", moduleAccessScriptStart);
@@ -564,6 +981,75 @@ assert.ok(
     cloudLoaderSource.includes("if(page.length<pageSize)break"),
   "Cloud data loading must paginate all operational records in stable batches",
 );
+
+assert.ok(
+  cloudLoaderSource.includes("const requestedCompanyId=companyId") &&
+    cloudLoaderSource.includes("const stagedRows={}") &&
+    cloudLoaderSource.includes("if(companyId!==requestedCompanyId)throw new Error") &&
+    cloudLoaderSource.includes("for(const k of selected)store[k]=stagedRows[k]"),
+  "Cloud refreshes must stage all requested company data and commit only after every table succeeds",
+);
+assert.ok(
+  html.includes("const previousStore=Object.fromEntries(coreTables.map(key=>[key,store[key]]))") &&
+    html.includes("companyId=previousCompanyId;") &&
+    html.includes("await window.asatuliRouteByMembership()") &&
+    html.includes("window.asatuliShowManagerDashboard==='function')window.asatuliShowManagerDashboard()") &&
+    html.includes("window.stopAsatuliRealtimeSync?.()") &&
+    html.includes("تعذر تبديل الشركة؛ أعدنا الشركة السابقة وبياناتها"),
+  "Company switching must stop old realtime updates, reload the role route, and rollback company/data on failure",
+);
+
+// Execute the cloud loader with a fake Supabase client: a mid-refresh failure
+// must leave every old company array untouched, and a clean refresh commits all.
+function makeCloudQueryClient(company, failTable = null) {
+  return {
+    from(table) {
+      const query = {
+        select() { return query; },
+        eq(column, value) { assert.equal(column, "company_id"); assert.equal(value, company); return query; },
+        order(column, options) { assert.equal(column, "id"); assert.equal(options.ascending, true); return query; },
+        async range(from, to) {
+          assert.equal(from, 0);
+          assert.equal(to, 499);
+          if (table === failTable) return { data: null, error: new Error("simulated " + table + " read failure") };
+          return { data: [{ id: table + "-" + company, company_id: company }], error: null };
+        },
+      };
+      return query;
+    },
+  };
+}
+const loaderStore = Object.fromEntries(["vehicles","drivers","fuel","maintenance","trips"].map(
+  key => [key, [{ id: "previous-" + key, company_id: "company-previous" }]],
+));
+const previousRows = Object.fromEntries(Object.entries(loaderStore));
+const loaderContext = { companyId: "company-next" };
+const executeCloudLoader = new Function(
+  "sb", "companyId", "store",
+  cloudLoaderSource + "; return loadCloud;",
+);
+const failingLoader = executeCloudLoader(
+  makeCloudQueryClient(loaderContext.companyId, "maintenance"),
+  loaderContext.companyId,
+  loaderStore,
+);
+await assert.rejects(failingLoader(), /simulated maintenance read failure/,
+  "A table read error during company refresh must be surfaced");
+for (const key of ["vehicles","drivers","fuel","maintenance","trips"]) {
+  assert.equal(loaderStore[key], previousRows[key],
+    "A failed full refresh must not partially replace " + key + " from the previous company");
+}
+const successfulLoader = executeCloudLoader(
+  makeCloudQueryClient(loaderContext.companyId),
+  loaderContext.companyId,
+  loaderStore,
+);
+await successfulLoader();
+for (const key of ["vehicles","drivers","fuel","maintenance","trips"]) {
+  assert.equal(loaderStore[key][0].company_id, "company-next",
+    "A successful full refresh must commit " + key + " for the requested company");
+}
+
 assert.ok(
   !driverApprovalRepair.includes("VALUES (v_company, p_user_id, 'viewer')"),
   "Employee approval must not create a generic viewer instead of a driver",
@@ -631,6 +1117,19 @@ assert.ok(
   removedMemberAccessMigration.includes("CREATE POLICY trip_invoice_read_company") &&
     removedMemberAccessMigration.includes("m.user_id = (SELECT auth.uid())"),
   "Trip invoice reads must be restricted to current company members",
+);
+
+assert.ok(
+  deployWorkflow.includes("needs: validate") &&
+    deployWorkflow.includes("vars.ASATULI_PRODUCTION_MIGRATIONS_READY == 'true'"),
+  "Production Pages deployment must stay gated until the driver idempotency migration is verified",
+);
+
+assert.ok(
+  operationsReadme.includes("## SECURITY DEFINER advisory review") &&
+    operationsReadme.includes("Do not blanket-revoke") &&
+    operationsReadme.includes("leaked-password protection"),
+  "Operations guidance must document the reviewed SECURITY DEFINER warnings and the Auth hardening follow-up",
 );
 
 assert.ok(policy.includes("CREATE POLICY trip_invoice_upload_assigned_driver"), "Assigned-driver upload policy is missing");

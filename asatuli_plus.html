@@ -357,8 +357,63 @@ const store={vehicles:[],drivers:[],fuel:[],maintenance:[],trips:[]};let current
 
 </script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"></script>
 <script>
-let sb=null, companyId=null, cloudMode=false;
-function openConnect(){document.getElementById('connectModal').classList.add('open');let cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');document.getElementById('sbUrl').value=cfg.url||'https://aicvzcxrakhzlcfosvsx.supabase.co';document.getElementById('sbKey').value=cfg.key||'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS';document.getElementById('connectStatus').textContent=''}
+let sb=null, companyId=null, cloudMode=false, cloudUserId=null;
+function fleetLocalStorageScopePrefix(){
+ if(!cloudMode)return '';
+ if(!companyId||!cloudUserId)throw new Error('تعذر تحديد حساب وشركة جلسة التخزين المحلية.');
+ return 'asatuli:scope:'+companyId+':'+cloudUserId+':';
+}
+function fleetLocalStorageKey(key){return fleetLocalStorageScopePrefix()+key;}
+function fleetLocalGetItem(key){return localStorage.getItem(fleetLocalStorageKey(key));}
+function fleetLocalSetItem(key,value){return localStorage.setItem(fleetLocalStorageKey(key),value);}
+function fleetLocalRemoveItem(key){return localStorage.removeItem(fleetLocalStorageKey(key));}
+const asatuliScopeRefreshers=[];
+window.asatuliRegisterScopeRefresher=function(callback){if(typeof callback==='function')asatuliScopeRefreshers.push(callback);};
+function asatuliHasLegacyLocalData(){
+ const keys=['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1','asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets'];
+ return keys.some(key=>localStorage.getItem(key)!==null)||
+  Array.from({length:localStorage.length},(_,i)=>localStorage.key(i)).some(key=>key&&(/^asatuli_(daily_check_|dispatch_check_)/.test(key)));
+}
+function asatuliRenderLegacyLocalDataNotice(){
+ const old=document.getElementById('asatuliLegacyLocalDataNotice');
+ if(!cloudMode||!asatuliHasLegacyLocalData()){old?.remove();return;}
+ const dash=document.getElementById('dash');
+ if(!dash)return;
+ const panel=old||document.createElement('section');
+ panel.id='asatuliLegacyLocalDataNotice';panel.className='card section';
+ panel.style.borderColor='#e6bd70';
+ panel.innerHTML='<h2>تنبيه خصوصية البيانات المحلية القديمة</h2><p class="sub">يوجد سجل قديم محفوظ على هذا الجهاز خارج حساب الشركة الحالي. تم إخفاؤه عن هذه الجلسة لحماية خصوصية الحسابات والشركات، ولم يتم حذفه أو نقله. لا تستورد هذه البيانات إلى الحساب الحالي إلا بعد التأكد من أنها تخصه.</p><button class="btn secondary" type="button" onclick="exportAsatuliLegacyLocalData()">تصدير السجل القديم للاحتفاظ به</button>';
+ if(!old)dash.insertBefore(panel,dash.firstChild);
+}
+window.exportAsatuliLegacyLocalData=function(){
+ const extras={asatuli_inspections:[],asatuli_incidents:[],handover:[],budgets:{},dispatchDaily:{},dailyChecklist:{}};
+ for(const key of ['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1']){try{const value=localStorage.getItem(key);if(value!==null)extras[key]=JSON.parse(value);}catch(error){console.warn('Legacy local data could not be parsed:',key,error);}}
+ for(const key of ['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets']){const value=localStorage.getItem(key);if(value!==null)extras.budgets[key]=value;}
+ for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&key.startsWith('asatuli_dispatch_check_'))extras.dispatchDaily[key]=localStorage.getItem(key);if(key&&key.startsWith('asatuli_daily_check_'))extras.dailyChecklist[key]=localStorage.getItem(key);}
+ const payload={app:'أسطولي Plus',format:'legacy-device-local-data',version:1,created_at:new Date().toISOString(),warning:'هذه بيانات محلية قديمة لم يتم ربطها بحساب أو شركة. راجع ملكيتها قبل استيرادها.',extras};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='asatuli-legacy-local-data-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+window.asatuliRefreshScopedLocalData=function(){
+ for(const refresh of asatuliScopeRefreshers){try{refresh();}catch(error){console.warn('Scoped local data refresh failed',error);}}
+ asatuliRenderLegacyLocalDataNotice();
+};
+function isAsatuliDeployPreview(){
+ const host=String(location.hostname||'').toLowerCase();
+ return host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app');
+}
+function isAsatuliProductionApiUrl(url){
+ try{return new URL(url).hostname.toLowerCase()==='aicvzcxrakhzlcfosvsx.supabase.co';}catch{return false;}
+}
+function openConnect(){
+ document.getElementById('connectModal').classList.add('open');
+ let cfg={};try{cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}')}catch(error){console.warn('Saved Supabase configuration is invalid',error);}
+ const preview=isAsatuliDeployPreview();
+ const savedProduction=preview&&isAsatuliProductionApiUrl(cfg.url||'');
+ document.getElementById('sbUrl').value=savedProduction?'':(cfg.url||(preview?'':'https://aicvzcxrakhzlcfosvsx.supabase.co'));
+ document.getElementById('sbKey').value=savedProduction?'':(cfg.key||(preview?'':'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS'));
+ document.getElementById('connectStatus').textContent=preview?'بيئة معاينة آمنة: أدخل رابط ومفتاح Supabase لفرع الاختبار فقط. الاتصال بقاعدة الإنتاج محظور من هذه المعاينة.':'';
+}
 function closeConnect(){if(document.body.classList.contains('auth-gate'))return;document.getElementById('connectModal').classList.remove('open')}
 async function connectAndAuth(mode){
  const status=document.getElementById('connectStatus');
@@ -373,17 +428,21 @@ async function connectAndAuth(mode){
   const password=document.getElementById('authPass').value;
   const email=identifier.includes('@')?identifier:('driver-'+identifier.replace(/\D/g,'')+'@asatuli.local');
   if(!url||!key||!identifier||!password)throw Error('أدخل اسم المستخدم أو البريد وكلمة المرور.');
+  if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error('ممنوع الاتصال بقاعدة الإنتاج من نسخة المعاينة. أدخل رابط ومفتاح فرع Supabase التجريبي.');
   localStorage.setItem('asatuli_sb_cfg',JSON.stringify({url,key}));
   sb=window.supabase.createClient(url,key);
-  const {error:loginError}=await sb.auth.signInWithPassword({email,password});
+  const {data:loginData,error:loginError}=await sb.auth.signInWithPassword({email,password});
   if(loginError)throw loginError;
+  if(!loginData?.user?.id)throw new Error('تعذر تحديد هوية الحساب بعد تسجيل الدخول.');
+  cloudUserId=loginData.user.id;
 
   const {error:inviteError}=await sb.rpc('accept_member_invites');
-  if(inviteError)throw new Error('تم تسجيل الدخول، لكن تعذر معالجة دعوة الشركة: '+inviteError.message);
+  if(inviteError)console.warn('Asatuli invite acceptance could not be completed; existing membership will still be checked.',inviteError);
 
   const {data:members,error:membersError}=await sb.from('members').select('company_id').order('company_id');
   if(membersError)throw membersError;
   if(!members?.length){
+   if(inviteError)throw new Error('تم تسجيل الدخول لكن تعذرت معالجة الدعوة: '+inviteError.message);
    throw new Error('هذا الحساب غير مرتبط بشركة في أسطولي. اطلب من مالك الشركة إرسال دعوة أو ربط حسابك. لم يتم إنشاء شركة جديدة.');
   }
   const ids=[...new Set(members.map(x=>x.company_id))];
@@ -402,6 +461,7 @@ async function connectAndAuth(mode){
   cloudMode=true;
   localStorage.setItem('asatuli_active_company',companyId);
   await loadCloud();
+  window.asatuliRefreshScopedLocalData?.();
   document.body.classList.remove('auth-gate');
   closeConnect();
   status.textContent='تم تحميل بيانات الشركة. جار فتح صفحة حسابك...';
@@ -424,20 +484,25 @@ async function loadCloud(targetTable=null){
  const tables={vehicles:'vehicles',drivers:'drivers',fuel:'fuel',maintenance:'maintenance',trips:'trips'};
  const selected=targetTable?[targetTable]:Object.keys(tables);
  if(selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k)))throw new Error('جدول تحديث غير معروف');
+ const requestedCompanyId=companyId;
+ const stagedRows={};
  const pageSize=500;
  for(const k of selected){
   const rows=[];
   for(let from=0;;from+=pageSize){
    let q=sb.from(tables[k]).select('*');
-   if(companyId)q=q.eq('company_id',companyId);
+   if(requestedCompanyId)q=q.eq('company_id',requestedCompanyId);
    const {data,error}=await q.order('id',{ascending:true}).range(from,from+pageSize-1);
    if(error)throw error;
+   if(companyId!==requestedCompanyId)throw new Error('تغيرت الشركة النشطة أثناء تحميل البيانات. أعد المحاولة.');
    const page=data||[];
    rows.push(...page);
    if(page.length<pageSize)break;
   }
-  store[k]=rows;
+  stagedRows[k]=rows;
  }
+ if(companyId!==requestedCompanyId)throw new Error('تغيرت الشركة النشطة أثناء تحميل البيانات. أعد المحاولة.');
+ for(const k of selected)store[k]=stagedRows[k];
 }
 
 const oldSave=save;let suppressLocalSave=false;save=function(){if(suppressLocalSave||cloudMode)return;oldSave();};
@@ -527,9 +592,68 @@ function exportFilteredCSV(){
  trips.forEach(x=>rows.push(['رحلة',x.day,vname(x.vehicle_id),dname(x.driver_id),Number(x.km||0),Number(x.loaded_meters||0),Number(x.other_cost||0),Number(x.revenue||0)]));
  const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-period-details.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-function backupJSON(){const extras={asatuli_inspections:[],asatuli_incidents:[],dispatchDaily:{},handover:[],budgets:{}};try{extras.asatuli_inspections=JSON.parse(localStorage.getItem('asatuli_inspections')||'[]')}catch{}try{extras.asatuli_incidents=JSON.parse(localStorage.getItem('asatuli_incidents')||'[]')}catch{}try{extras.handover=JSON.parse(localStorage.getItem('asatuli_handover_notes_v1')||'[]')}catch{}for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('asatuli_dispatch_check_'))extras.dispatchDaily[k]=localStorage.getItem(k);if(['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets'].includes(k))extras.budgets[k]=localStorage.getItem(k)}const payload={app:'أسطولي Plus',version:3,created_at:new Date().toISOString(),data:store,extras};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
-function restoreJSON(event){const file=event.target.files?.[0];if(!file)return;const restoreInput=event.target;if(file.size>20*1024*1024){alert('حجم النسخة أكبر من الحد المسموح (20 ميغابايت).');restoreInput.value='';return;}if(cloudMode){alert('الاستعادة من ملف متاحة للوضع المحلي فقط حالياً. سجّل خروج السحابة أولاً.');event.target.value='';return;}const reader=new FileReader();reader.onerror=()=>{alert('تعذر قراءة ملف النسخة الاحتياطية.');restoreInput.value='';};reader.onload=()=>{try{const parsed=JSON.parse(reader.result);const data=parsed.data||parsed;const keys=['vehicles','drivers','fuel','maintenance','trips'];if(!keys.every(k=>Array.isArray(data[k])))throw Error('الملف لا يحتوي بنية أسطولي صحيحة.');if(!keys.every(k=>data[k].every(row=>row&&typeof row==='object'&&!Array.isArray(row))))throw Error('بعض سجلات الملف غير صالحة.');if(data.vehicles.some(x=>!x.plate)||data.drivers.some(x=>!x.name))throw Error('يوجد سجل مركبة أو سائق بدون الاسم/اللوحة الأساسية.');const idSets={};for(const k of keys){idSets[k]=new Set();for(const row of data[k]){if(row.id!==undefined&&row.id!==null&&row.id!==''){if(idSets[k].has(String(row.id)))throw Error('يوجد رقم سجل مكرر في قسم '+k+'.');idSets[k].add(String(row.id));}}}const numericFields={fuel:['liters','price'],maintenance:['cost'],trips:['km','revenue','other_cost']};for(const [section,fieldsList] of Object.entries(numericFields)){for(const row of data[section])for(const field of fieldsList){const val=row[field];if(val!==undefined&&val!==null&&val!==''&&!Number.isFinite(Number(val)))throw Error('قيمة رقمية غير صحيحة في '+section+'.');if(val!==undefined&&val!==null&&val!==''&&Number(val)<0)throw Error('لا يمكن استعادة قيمة سالبة في '+section+'.');}}const ex=parsed.extras||{};if(ex.asatuli_inspections!==undefined&&!Array.isArray(ex.asatuli_inspections))throw Error('بيانات الفحوصات غير صحيحة.');if(ex.asatuli_incidents!==undefined&&!Array.isArray(ex.asatuli_incidents))throw Error('بيانات الحوادث غير صحيحة.');if(ex.handover!==undefined&&!Array.isArray(ex.handover))throw Error('بيانات التسليم غير صحيحة.');if(ex.dispatchDaily!==undefined&&(typeof ex.dispatchDaily!=='object'||Array.isArray(ex.dispatchDaily)))throw Error('بيانات التشغيل اليومي غير صحيحة.');const budgetKeys=['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets'];if(ex.budgets!==undefined&&(typeof ex.budgets!=='object'||Array.isArray(ex.budgets)))throw Error('بيانات الميزانيات غير صحيحة.');if(ex.budgets)for(const [k,v] of Object.entries(ex.budgets)){if(!budgetKeys.includes(k))continue;if(k==='asatuli_budget'&&!Number.isFinite(Number(v)))throw Error('قيمة الميزانية العامة غير صحيحة.');if(k!=='asatuli_budget'){let parsedValue;try{parsedValue=typeof v==='string'?JSON.parse(v):v;}catch{throw Error('ملف الميزانيات يحتوي JSON غير صحيح.');}if(typeof parsedValue!=='object'||parsedValue===null||Array.isArray(parsedValue))throw Error('هيكل الميزانية غير صحيح.');const validateBudgetTree=(obj)=>{for(const [key,value] of Object.entries(obj)){if(typeof value==='object'&&value!==null&&!Array.isArray(value))validateBudgetTree(value);else if(typeof value!=='number'&&!(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value))))throw Error('قيمة الميزانية غير صحيحة.');else if(!Number.isFinite(Number(value))||Number(value)<0)throw Error('قيمة الميزانية يجب أن تكون رقمًا غير سالب.');}};validateBudgetTree(parsedValue);}}for(const [k,v] of Object.entries(ex.dispatchDaily||{})){if(!k.startsWith('asatuli_dispatch_check_')||typeof v!=='string')throw Error('بيانات التشغيل اليومي غير صحيحة.');}if(!confirm('سيتم تنزيل نسخة أمان من البيانات الحالية ثم استبدال بيانات أسطولي المحلية بالنسخة المختارة. متابعة؟'))return;const backupKeys=['asatuli_demo','asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1',...budgetKeys];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('asatuli_dispatch_check_'))backupKeys.push(k);}const snapshot={};for(const k of new Set(backupKeys))snapshot[k]=localStorage.getItem(k);backupJSON();try{for(const k of keys)store[k]=data[k];['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1',...budgetKeys].forEach(k=>localStorage.removeItem(k));for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('asatuli_dispatch_check_'))localStorage.removeItem(k);}if(Array.isArray(ex.asatuli_inspections))localStorage.setItem('asatuli_inspections',JSON.stringify(ex.asatuli_inspections));if(Array.isArray(ex.asatuli_incidents))localStorage.setItem('asatuli_incidents',JSON.stringify(ex.asatuli_incidents));if(Array.isArray(ex.handover))localStorage.setItem('asatuli_handover_notes_v1',JSON.stringify(ex.handover));if(ex.dispatchDaily)Object.entries(ex.dispatchDaily).forEach(([k,v])=>localStorage.setItem(k,v));if(ex.budgets)Object.entries(ex.budgets).forEach(([k,v])=>{if(budgetKeys.includes(k))localStorage.setItem(k,String(v));});save();render();renderMonthlyReport();alert('تمت استعادة النسخة الاحتياطية بنجاح.');}catch(applyError){for(const k of Object.keys(snapshot)){if(snapshot[k]===null)localStorage.removeItem(k);else localStorage.setItem(k,snapshot[k]);}Object.assign(store,JSON.parse(snapshot.asatuli_demo||'{}'));render();renderMonthlyReport();throw Error('تعذر تطبيق الاستعادة وتمت محاولة إعادة البيانات السابقة: '+(applyError.message||applyError));}}catch(err){alert('تعذر استعادة الملف: '+(err.message||err));}finally{event.target.value='';}};reader.onerror=()=>{alert('تعذر قراءة الملف.');event.target.value='';};reader.readAsText(file);}
-function monthFilter(items){const m=document.getElementById('reportMonth')?.value,v=document.getElementById('reportVehicle')?.value;return items.filter(x=>(!m||(x.day||'').slice(0,7)===m)&&(!v||x.vehicle_id===v))}function getFleetBudget(){try{return Number(localStorage.getItem('asatuli_budget')||0)}catch{return 0}}function saveFleetBudget(){const val=Number(document.getElementById('fleetBudgetInput')?.value||0);if(!Number.isFinite(val)||val<0){alert('أدخل ميزانية صحيحة');return;}localStorage.setItem('asatuli_budget',String(val));renderMonthlyReport();alert('تم حفظ الميزانية');}function updateBudgetStatus(expenses){const budget=getFleetBudget(),box=document.getElementById('fleetBudgetStatus'),inp=document.getElementById('fleetBudgetInput');if(inp&&document.activeElement!==inp)inp.value=budget||'';if(!box)return;if(!budget){box.innerHTML='حدد ميزانية لمراقبة المصروفات.';return;}const pct=expenses/budget*100,remaining=budget-expenses;box.innerHTML=`<p>الميزانية: <b>${money(budget)} دينار</b> — المصروف: <b>${money(expenses)} دينار</b></p><p>${remaining>=0?`المتبقي ${money(remaining)} دينار (${money(100-pct)}%)`:`تجاوزت الميزانية بمقدار ${money(-remaining)} دينار (${money(pct-100)}%)`}</p><div class="alert"><span>${pct>=100?'⚠️ تم تجاوز الميزانية!':pct>=80?'تنبيه: وصلت إلى '+money(pct)+'% من الميزانية.':'أنت ضمن الميزانية المحددة.'}</span><span class="pill '+(pct>=80?'warn':'')+'">'+money(pct)+'%</span></div>`;}function getVehicleBudgets(){try{return JSON.parse(localStorage.getItem('asatuli_vehicle_budgets')||'{}')}catch{return {}}}function saveVehicleBudgets(){const budgets=getVehicleBudgets();document.querySelectorAll('[data-vbudget]').forEach(inp=>{const id=inp.dataset.vbudget,val=Number(inp.value||0);if(Number.isFinite(val)&&val>=0){if(val===0)delete budgets[id];else budgets[id]=val;}});localStorage.setItem('asatuli_vehicle_budgets',JSON.stringify(budgets));renderMonthlyReport();alert('تم حفظ ميزانيات المركبات');}function renderVehicleBudgets(){const panel=document.getElementById('vehicleBudgetRows');if(!panel)return;const budgets=getVehicleBudgets(),trips=monthFilter(store.trips),fuelRows=monthFilter(store.fuel),maintRows=monthFilter(store.maintenance),selected=document.getElementById('reportVehicle')?.value||'';const vehicles=store.vehicles.filter(v=>!selected||v.id===selected);const rows=vehicles.map(v=>{const expense=fuelRows.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.price||0),0)+maintRows.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.cost||0),0)+trips.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.other_cost||0),0);const budget=Number(budgets[v.id]||0),pct=budget?expense/budget*100:0;let status=budget?(pct>=100?'⚠️ تجاوز الميزانية':pct>=80?'⚠️ قرب من الميزانية':'ضمن الميزانية'):'لم تحدد ميزانية';return `<tr><td>${escHTML(v.plate)}</td><td>${money(expense)}</td><td><input type=number min=0 step=0.001 data-vbudget="${escHTML(v.id)}" value="${budget||''}" placeholder="ميزانية دينار" style="max-width:130px"></td><td>${budget?money(budget-expense)+' دينار':'—'}</td><td>${budget?money(pct)+'% — '+status:status}</td></tr>`}).join('');panel.innerHTML=`<div class="tablewrap"><table><thead><tr><th>المركبة</th><th>المصروف للفترة</th><th>الميزانية</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody>${rows||'<tr><td colspan="5">لا توجد مركبات</td></tr>'}</tbody></table></div>`;}function getCategoryVehicleBudgets(){try{return JSON.parse(localStorage.getItem('asatuli_category_vehicle_budgets')||'{}')}catch{return {}}}function saveCategoryVehicleBudgets(){const budgets=getCategoryVehicleBudgets();document.querySelectorAll('[data-catbudget]').forEach(inp=>{const id=inp.dataset.catbudget,cat=inp.dataset.category,val=Number(inp.value||0);if(!budgets[id])budgets[id]={};if(Number.isFinite(val)&&val>=0){if(val===0)delete budgets[id][cat];else budgets[id][cat]=val;if(!Object.keys(budgets[id]).length)delete budgets[id];}});localStorage.setItem('asatuli_category_vehicle_budgets',JSON.stringify(budgets));renderMonthlyReport();alert('تم حفظ ميزانيات الوقود والصيانة');}function renderCategoryVehicleBudgets(){const panel=document.getElementById('categoryVehicleBudgetRows');if(!panel)return;const budgets=getCategoryVehicleBudgets(),fuels=monthFilter(store.fuel),maint=monthFilter(store.maintenance),selected=document.getElementById('reportVehicle')?.value||'',vehicles=store.vehicles.filter(v=>!selected||v.id===selected);const rows=vehicles.map(v=>{const f=fuels.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.price||0),0),m=maint.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.cost||0),0),bf=Number(budgets[v.id]?.fuel||0),bm=Number(budgets[v.id]?.maintenance||0);function status(actual,budget){return budget?(actual>=budget?'تجاوز الميزانية':actual>=budget*.8?'قرب من الميزانية':'ضمن الميزانية'):'غير محددة';}function cell(actual,budget,cat){const pct=budget?actual/budget*100:0;return `<td>${money(actual)}</td><td><input type=number min=0 step=0.001 data-catbudget="${escHTML(v.id)}" data-category="${cat}" value="${budget||''}" placeholder="ميزانية" style="max-width:110px"></td><td>${budget?money(budget-actual)+' — '+money(pct)+'% — '+status(actual,budget):'غير محددة'}</td>`}return `<tr><td>${escHTML(v.plate)}</td>${cell(f,bf,'fuel')}${cell(m,bm,'maintenance')}</tr>`}).join('');panel.innerHTML=`<div class="tablewrap"><table><thead><tr><th>المركبة</th><th>مصروف الوقود</th><th>ميزانية الوقود</th><th>حالة الوقود</th><th>مصروف الصيانة</th><th>ميزانية الصيانة</th><th>حالة الصيانة</th></tr></thead><tbody>${rows||'<tr><td colspan="7">لا توجد مركبات</td></tr>'}</tbody></table></div>`;}function renderMonthlyReport(){
+function backupJSON(){const extras={asatuli_inspections:[],asatuli_incidents:[],dispatchDaily:{},dailyChecklist:{},handover:[],budgets:{}};try{extras.asatuli_inspections=JSON.parse(fleetLocalGetItem('asatuli_inspections')||'[]')}catch{}try{extras.asatuli_incidents=JSON.parse(fleetLocalGetItem('asatuli_incidents')||'[]')}catch{}try{extras.handover=JSON.parse(fleetLocalGetItem('asatuli_handover_notes_v1')||'[]')}catch{}for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i),prefix=fleetLocalStorageKey('asatuli_dispatch_check_'),dailyPrefix=fleetLocalStorageKey('asatuli_daily_check_');if(k&&k.startsWith(prefix))extras.dispatchDaily['asatuli_dispatch_check_'+k.slice(prefix.length)]=localStorage.getItem(k);if(k&&k.startsWith(dailyPrefix))extras.dailyChecklist['asatuli_daily_check_'+k.slice(dailyPrefix.length)]=localStorage.getItem(k)}for(const k of ['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets']){const value=fleetLocalGetItem(k);if(value!==null)extras.budgets[k]=value;}const payload={app:'أسطولي Plus',version:3,created_at:new Date().toISOString(),local_scope:cloudMode?{company_id:companyId,user_id:cloudUserId}:null,data:store,extras};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+function restoreScopedLocalExtras(parsed){
+ const scope=parsed?.local_scope;
+ if(!scope||scope.company_id!==companyId||scope.user_id!==cloudUserId){
+  throw new Error('هذه النسخة ليست مرتبطة بالحساب والشركة الحاليين. لم يتم استيراد أي بيانات.');
+ }
+ if(!parsed.extras||typeof parsed.extras!=='object'||Array.isArray(parsed.extras))throw new Error('ملف النسخة لا يحتوي بيانات تكميلية صالحة.');
+ const ex=parsed.extras,budgetKeys=['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets'];
+ for(const key of ['asatuli_inspections','asatuli_incidents','handover']){
+  const value=key==='handover'?ex.handover:ex[key];
+  if(value!==undefined&&(!Array.isArray(value)||!value.every(row=>row&&typeof row==='object'&&!Array.isArray(row))))throw new Error('بنية السجلات المحلية غير صحيحة: '+key);
+ }
+ if(ex.dispatchDaily!==undefined&&(typeof ex.dispatchDaily!=='object'||Array.isArray(ex.dispatchDaily)))throw new Error('قائمة التشغيل اليومية غير صحيحة.');
+ for(const [key,value] of Object.entries(ex.dispatchDaily||{})){
+  if(!key.startsWith('asatuli_dispatch_check_')||typeof value!=='string')throw new Error('بيانات قائمة التشغيل غير صحيحة.');
+  let parsedValue;try{parsedValue=JSON.parse(value);}catch(error){throw new Error('تعذر قراءة إحدى قوائم التشغيل اليومية.');}
+  if(!parsedValue||typeof parsedValue!=='object'||Array.isArray(parsedValue)||!Array.isArray(parsedValue.tasks))throw new Error('هيكل قائمة التشغيل اليومية غير صحيح.');
+ }
+ if(ex.dailyChecklist!==undefined&&(typeof ex.dailyChecklist!=='object'||Array.isArray(ex.dailyChecklist)))throw new Error('قائمة التجهيز اليومية غير صحيحة.');
+ for(const [key,value] of Object.entries(ex.dailyChecklist||{})){
+  if(!key.startsWith('asatuli_daily_check_')||typeof value!=='string')throw new Error('بيانات قائمة التجهيز اليومية غير صحيحة.');
+  let parsedValue;try{parsedValue=JSON.parse(value);}catch(error){throw new Error('تعذر قراءة إحدى قوائم التجهيز اليومية.');}
+  if(!parsedValue||typeof parsedValue!=='object'||Array.isArray(parsedValue)||Object.entries(parsedValue).some(([index,checked])=>!/^\d+$/.test(index)||typeof checked!=='boolean'))throw new Error('هيكل قائمة التجهيز اليومية غير صحيح.');
+ }
+ if(ex.budgets!==undefined&&(typeof ex.budgets!=='object'||Array.isArray(ex.budgets)))throw new Error('بيانات الميزانيات غير صحيحة.');
+ const validateBudgetTree=obj=>{for(const [key,value] of Object.entries(obj)){if(value&&typeof value==='object'&&!Array.isArray(value))validateBudgetTree(value);else if((typeof value!=='number'&&!(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value))))||!Number.isFinite(Number(value))||Number(value)<0)throw new Error('قيمة ميزانية غير صحيحة: '+key);}};
+ for(const [key,value] of Object.entries(ex.budgets||{})){
+  if(!budgetKeys.includes(key))throw new Error('اسم حقل ميزانية غير معروف.');
+  if(key==='asatuli_budget'){if(!Number.isFinite(Number(value))||Number(value)<0)throw new Error('قيمة الميزانية العامة غير صحيحة.');}
+  else{let parsedValue;try{parsedValue=typeof value==='string'?JSON.parse(value):value;}catch(error){throw new Error('ملف الميزانيات يحتوي JSON غير صحيح.');}if(!parsedValue||typeof parsedValue!=='object'||Array.isArray(parsedValue))throw new Error('هيكل الميزانية غير صحيح.');validateBudgetTree(parsedValue);}
+ }
+ if(!confirm('سيتم استبدال سجلات الفحوصات والحوادث والتسليم والميزانيات وقوائم التشغيل المحلية للحساب والشركة الحاليين فقط. لن يتم تغيير الرحلات أو المركبات أو السائقين في قاعدة البيانات. متابعة؟'))return;
+ const baseKeys=['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1',...budgetKeys];
+ const snapshot={};
+ for(const key of baseKeys){const storageKey=fleetLocalStorageKey(key);snapshot[storageKey]=localStorage.getItem(storageKey);}
+ for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&(key.startsWith(fleetLocalStorageKey('asatuli_dispatch_check_'))||key.startsWith(fleetLocalStorageKey('asatuli_daily_check_'))))snapshot[key]=localStorage.getItem(key);}
+ try{
+  for(const key of baseKeys)fleetLocalRemoveItem(key);
+  for(let i=localStorage.length-1;i>=0;i--){const key=localStorage.key(i);if(key&&(key.startsWith(fleetLocalStorageKey('asatuli_dispatch_check_'))||key.startsWith(fleetLocalStorageKey('asatuli_daily_check_'))))localStorage.removeItem(key);}
+  if(Array.isArray(ex.asatuli_inspections))fleetLocalSetItem('asatuli_inspections',JSON.stringify(ex.asatuli_inspections));
+  if(Array.isArray(ex.asatuli_incidents))fleetLocalSetItem('asatuli_incidents',JSON.stringify(ex.asatuli_incidents));
+  if(Array.isArray(ex.handover))fleetLocalSetItem('asatuli_handover_notes_v1',JSON.stringify(ex.handover));
+  for(const [key,value] of Object.entries(ex.dispatchDaily||{}))localStorage.setItem(fleetLocalStorageKey(key),value);
+  for(const [key,value] of Object.entries(ex.dailyChecklist||{}))localStorage.setItem(fleetLocalStorageKey(key),value);
+  for(const [key,value] of Object.entries(ex.budgets||{}))fleetLocalSetItem(key,String(value));
+  window.asatuliRefreshScopedLocalData?.();
+  alert('تم استعادة البيانات التكميلية للحساب والشركة الحاليين بنجاح. لم يتم تعديل سجلات التشغيل السحابية.');
+ }catch(error){
+  for(let i=localStorage.length-1;i>=0;i--){const key=localStorage.key(i);if(key&&(key.startsWith(fleetLocalStorageKey('asatuli_dispatch_check_'))||key.startsWith(fleetLocalStorageKey('asatuli_daily_check_'))))localStorage.removeItem(key);}
+  for(const [key,value] of Object.entries(snapshot)){if(value===null)localStorage.removeItem(key);else localStorage.setItem(key,value);}
+  window.asatuliRefreshScopedLocalData?.();
+  throw new Error('تعذر تطبيق الاستعادة وتمت إعادة البيانات المحلية السابقة: '+(error.message||error));
+ }
+}
+function restoreJSON(event){const file=event.target.files?.[0];if(!file)return;const restoreInput=event.target;if(file.size>20*1024*1024){alert('حجم النسخة أكبر من الحد المسموح (20 ميغابايت).');restoreInput.value='';return;}if(cloudMode){
+ const reader=new FileReader();
+ reader.onerror=()=>{alert('تعذر قراءة ملف النسخة الاحتياطية.');restoreInput.value='';};
+ reader.onload=()=>{try{const parsed=JSON.parse(reader.result);restoreScopedLocalExtras(parsed);}catch(error){alert('تعذر استعادة البيانات التكميلية: '+(error.message||error));}finally{restoreInput.value='';}};
+ reader.readAsText(file);
+ return;
+}const reader=new FileReader();reader.onerror=()=>{alert('تعذر قراءة ملف النسخة الاحتياطية.');restoreInput.value='';};reader.onload=()=>{try{const parsed=JSON.parse(reader.result);if(parsed.local_scope)throw Error('هذه نسخة مرتبطة بحساب وشركة محددين. سجّل الدخول بنفس الحساب والشركة لاستعادة بياناتها التكميلية.');const data=parsed.data||parsed;const keys=['vehicles','drivers','fuel','maintenance','trips'];if(!keys.every(k=>Array.isArray(data[k])))throw Error('الملف لا يحتوي بنية أسطولي صحيحة.');if(!keys.every(k=>data[k].every(row=>row&&typeof row==='object'&&!Array.isArray(row))))throw Error('بعض سجلات الملف غير صالحة.');if(data.vehicles.some(x=>!x.plate)||data.drivers.some(x=>!x.name))throw Error('يوجد سجل مركبة أو سائق بدون الاسم/اللوحة الأساسية.');const idSets={};for(const k of keys){idSets[k]=new Set();for(const row of data[k]){if(row.id!==undefined&&row.id!==null&&row.id!==''){if(idSets[k].has(String(row.id)))throw Error('يوجد رقم سجل مكرر في قسم '+k+'.');idSets[k].add(String(row.id));}}}const numericFields={fuel:['liters','price'],maintenance:['cost'],trips:['km','revenue','other_cost']};for(const [section,fieldsList] of Object.entries(numericFields)){for(const row of data[section])for(const field of fieldsList){const val=row[field];if(val!==undefined&&val!==null&&val!==''&&!Number.isFinite(Number(val)))throw Error('قيمة رقمية غير صحيحة في '+section+'.');if(val!==undefined&&val!==null&&val!==''&&Number(val)<0)throw Error('لا يمكن استعادة قيمة سالبة في '+section+'.');}}const ex=parsed.extras||{};if(ex.asatuli_inspections!==undefined&&!Array.isArray(ex.asatuli_inspections))throw Error('بيانات الفحوصات غير صحيحة.');if(ex.asatuli_incidents!==undefined&&!Array.isArray(ex.asatuli_incidents))throw Error('بيانات الحوادث غير صحيحة.');if(ex.handover!==undefined&&!Array.isArray(ex.handover))throw Error('بيانات التسليم غير صحيحة.');if(ex.dispatchDaily!==undefined&&(typeof ex.dispatchDaily!=='object'||Array.isArray(ex.dispatchDaily)))throw Error('بيانات التشغيل اليومي غير صحيحة.');const budgetKeys=['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets'];if(ex.budgets!==undefined&&(typeof ex.budgets!=='object'||Array.isArray(ex.budgets)))throw Error('بيانات الميزانيات غير صحيحة.');if(ex.budgets)for(const [k,v] of Object.entries(ex.budgets)){if(!budgetKeys.includes(k))continue;if(k==='asatuli_budget'&&!Number.isFinite(Number(v)))throw Error('قيمة الميزانية العامة غير صحيحة.');if(k!=='asatuli_budget'){let parsedValue;try{parsedValue=typeof v==='string'?JSON.parse(v):v;}catch{throw Error('ملف الميزانيات يحتوي JSON غير صحيح.');}if(typeof parsedValue!=='object'||parsedValue===null||Array.isArray(parsedValue))throw Error('هيكل الميزانية غير صحيح.');const validateBudgetTree=(obj)=>{for(const [key,value] of Object.entries(obj)){if(typeof value==='object'&&value!==null&&!Array.isArray(value))validateBudgetTree(value);else if(typeof value!=='number'&&!(typeof value==='string'&&value.trim()!==''&&Number.isFinite(Number(value))))throw Error('قيمة الميزانية غير صحيحة.');else if(!Number.isFinite(Number(value))||Number(value)<0)throw Error('قيمة الميزانية يجب أن تكون رقمًا غير سالب.');}};validateBudgetTree(parsedValue);}}for(const [k,v] of Object.entries(ex.dispatchDaily||{})){if(!k.startsWith('asatuli_dispatch_check_')||typeof v!=='string')throw Error('بيانات التشغيل اليومي غير صحيحة.');}if(ex.dailyChecklist!==undefined&&(typeof ex.dailyChecklist!=='object'||Array.isArray(ex.dailyChecklist)))throw Error('بيانات قائمة التجهيز اليومية غير صحيحة.');for(const [k,v] of Object.entries(ex.dailyChecklist||{})){if(!k.startsWith('asatuli_daily_check_')||typeof v!=='string')throw Error('بيانات قائمة التجهيز اليومية غير صحيحة.');let parsedDaily;try{parsedDaily=JSON.parse(v);}catch{throw Error('ملف قائمة التجهيز اليومية يحتوي JSON غير صحيح.');}if(!parsedDaily||typeof parsedDaily!=='object'||Array.isArray(parsedDaily)||Object.entries(parsedDaily).some(([index,checked])=>!/^\d+$/.test(index)||typeof checked!=='boolean'))throw Error('هيكل قائمة التجهيز اليومية غير صحيح.');}if(!confirm('سيتم تنزيل نسخة أمان من البيانات الحالية ثم استبدال بيانات أسطولي المحلية بالنسخة المختارة. متابعة؟'))return;const backupKeys=['asatuli_demo','asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1',...budgetKeys];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&(k.startsWith('asatuli_dispatch_check_')||k.startsWith('asatuli_daily_check_')))backupKeys.push(k);}const snapshot={};for(const k of new Set(backupKeys))snapshot[k]=localStorage.getItem(k);backupJSON();try{for(const k of keys)store[k]=data[k];['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1',...budgetKeys].forEach(k=>localStorage.removeItem(k));for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&(k.startsWith('asatuli_dispatch_check_')||k.startsWith('asatuli_daily_check_')))localStorage.removeItem(k);}if(Array.isArray(ex.asatuli_inspections))localStorage.setItem('asatuli_inspections',JSON.stringify(ex.asatuli_inspections));if(Array.isArray(ex.asatuli_incidents))localStorage.setItem('asatuli_incidents',JSON.stringify(ex.asatuli_incidents));if(Array.isArray(ex.handover))localStorage.setItem('asatuli_handover_notes_v1',JSON.stringify(ex.handover));if(ex.dispatchDaily)Object.entries(ex.dispatchDaily).forEach(([k,v])=>localStorage.setItem(k,v));if(ex.dailyChecklist)Object.entries(ex.dailyChecklist).forEach(([k,v])=>localStorage.setItem(k,v));if(ex.budgets)Object.entries(ex.budgets).forEach(([k,v])=>{if(budgetKeys.includes(k))localStorage.setItem(k,String(v));});save();render();renderMonthlyReport();alert('تمت استعادة النسخة الاحتياطية بنجاح.');}catch(applyError){for(const k of Object.keys(snapshot)){if(snapshot[k]===null)localStorage.removeItem(k);else localStorage.setItem(k,snapshot[k]);}Object.assign(store,JSON.parse(snapshot.asatuli_demo||'{}'));render();renderMonthlyReport();throw Error('تعذر تطبيق الاستعادة وتمت محاولة إعادة البيانات السابقة: '+(applyError.message||applyError));}}catch(err){alert('تعذر استعادة الملف: '+(err.message||err));}finally{event.target.value='';}};reader.onerror=()=>{alert('تعذر قراءة الملف.');event.target.value='';};reader.readAsText(file);}
+function monthFilter(items){const m=document.getElementById('reportMonth')?.value,v=document.getElementById('reportVehicle')?.value;return items.filter(x=>(!m||(x.day||'').slice(0,7)===m)&&(!v||x.vehicle_id===v))}function getFleetBudget(){try{return Number(fleetLocalGetItem('asatuli_budget')||0)}catch{return 0}}function saveFleetBudget(){const val=Number(document.getElementById('fleetBudgetInput')?.value||0);if(!Number.isFinite(val)||val<0){alert('أدخل ميزانية صحيحة');return;}fleetLocalSetItem('asatuli_budget',String(val));renderMonthlyReport();alert('تم حفظ الميزانية');}function updateBudgetStatus(expenses){const budget=getFleetBudget(),box=document.getElementById('fleetBudgetStatus'),inp=document.getElementById('fleetBudgetInput');if(inp&&document.activeElement!==inp)inp.value=budget||'';if(!box)return;if(!budget){box.innerHTML='حدد ميزانية لمراقبة المصروفات.';return;}const pct=expenses/budget*100,remaining=budget-expenses;box.innerHTML=`<p>الميزانية: <b>${money(budget)} دينار</b> — المصروف: <b>${money(expenses)} دينار</b></p><p>${remaining>=0?`المتبقي ${money(remaining)} دينار (${money(100-pct)}%)`:`تجاوزت الميزانية بمقدار ${money(-remaining)} دينار (${money(pct-100)}%)`}</p><div class="alert"><span>${pct>=100?'⚠️ تم تجاوز الميزانية!':pct>=80?'تنبيه: وصلت إلى '+money(pct)+'% من الميزانية.':'أنت ضمن الميزانية المحددة.'}</span><span class="pill '+(pct>=80?'warn':'')+'">'+money(pct)+'%</span></div>`;}function getVehicleBudgets(){try{return JSON.parse(fleetLocalGetItem('asatuli_vehicle_budgets')||'{}')}catch{return {}}}function saveVehicleBudgets(){const budgets=getVehicleBudgets();document.querySelectorAll('[data-vbudget]').forEach(inp=>{const id=inp.dataset.vbudget,val=Number(inp.value||0);if(Number.isFinite(val)&&val>=0){if(val===0)delete budgets[id];else budgets[id]=val;}});fleetLocalSetItem('asatuli_vehicle_budgets',JSON.stringify(budgets));renderMonthlyReport();alert('تم حفظ ميزانيات المركبات');}function renderVehicleBudgets(){const panel=document.getElementById('vehicleBudgetRows');if(!panel)return;const budgets=getVehicleBudgets(),trips=monthFilter(store.trips),fuelRows=monthFilter(store.fuel),maintRows=monthFilter(store.maintenance),selected=document.getElementById('reportVehicle')?.value||'';const vehicles=store.vehicles.filter(v=>!selected||v.id===selected);const rows=vehicles.map(v=>{const expense=fuelRows.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.price||0),0)+maintRows.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.cost||0),0)+trips.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.other_cost||0),0);const budget=Number(budgets[v.id]||0),pct=budget?expense/budget*100:0;let status=budget?(pct>=100?'⚠️ تجاوز الميزانية':pct>=80?'⚠️ قرب من الميزانية':'ضمن الميزانية'):'لم تحدد ميزانية';return `<tr><td>${escHTML(v.plate)}</td><td>${money(expense)}</td><td><input type=number min=0 step=0.001 data-vbudget="${escHTML(v.id)}" value="${budget||''}" placeholder="ميزانية دينار" style="max-width:130px"></td><td>${budget?money(budget-expense)+' دينار':'—'}</td><td>${budget?money(pct)+'% — '+status:status}</td></tr>`}).join('');panel.innerHTML=`<div class="tablewrap"><table><thead><tr><th>المركبة</th><th>المصروف للفترة</th><th>الميزانية</th><th>المتبقي</th><th>الحالة</th></tr></thead><tbody>${rows||'<tr><td colspan="5">لا توجد مركبات</td></tr>'}</tbody></table></div>`;}function getCategoryVehicleBudgets(){try{return JSON.parse(fleetLocalGetItem('asatuli_category_vehicle_budgets')||'{}')}catch{return {}}}function saveCategoryVehicleBudgets(){const budgets=getCategoryVehicleBudgets();document.querySelectorAll('[data-catbudget]').forEach(inp=>{const id=inp.dataset.catbudget,cat=inp.dataset.category,val=Number(inp.value||0);if(!budgets[id])budgets[id]={};if(Number.isFinite(val)&&val>=0){if(val===0)delete budgets[id][cat];else budgets[id][cat]=val;if(!Object.keys(budgets[id]).length)delete budgets[id];}});fleetLocalSetItem('asatuli_category_vehicle_budgets',JSON.stringify(budgets));renderMonthlyReport();alert('تم حفظ ميزانيات الوقود والصيانة');}function renderCategoryVehicleBudgets(){const panel=document.getElementById('categoryVehicleBudgetRows');if(!panel)return;const budgets=getCategoryVehicleBudgets(),fuels=monthFilter(store.fuel),maint=monthFilter(store.maintenance),selected=document.getElementById('reportVehicle')?.value||'',vehicles=store.vehicles.filter(v=>!selected||v.id===selected);const rows=vehicles.map(v=>{const f=fuels.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.price||0),0),m=maint.filter(x=>x.vehicle_id===v.id).reduce((a,x)=>a+Number(x.cost||0),0),bf=Number(budgets[v.id]?.fuel||0),bm=Number(budgets[v.id]?.maintenance||0);function status(actual,budget){return budget?(actual>=budget?'تجاوز الميزانية':actual>=budget*.8?'قرب من الميزانية':'ضمن الميزانية'):'غير محددة';}function cell(actual,budget,cat){const pct=budget?actual/budget*100:0;return `<td>${money(actual)}</td><td><input type=number min=0 step=0.001 data-catbudget="${escHTML(v.id)}" data-category="${cat}" value="${budget||''}" placeholder="ميزانية" style="max-width:110px"></td><td>${budget?money(budget-actual)+' — '+money(pct)+'% — '+status(actual,budget):'غير محددة'}</td>`}return `<tr><td>${escHTML(v.plate)}</td>${cell(f,bf,'fuel')}${cell(m,bm,'maintenance')}</tr>`}).join('');panel.innerHTML=`<div class="tablewrap"><table><thead><tr><th>المركبة</th><th>مصروف الوقود</th><th>ميزانية الوقود</th><th>حالة الوقود</th><th>مصروف الصيانة</th><th>ميزانية الصيانة</th><th>حالة الصيانة</th></tr></thead><tbody>${rows||'<tr><td colspan="7">لا توجد مركبات</td></tr>'}</tbody></table></div>`;}function renderMonthlyReport(){
  const trips=monthFilter(store.trips),fuelRows=monthFilter(store.fuel),maintRows=monthFilter(store.maintenance);
  const rev=trips.reduce((a,x)=>a+Number(x.revenue||0),0),fuel=fuelRows.reduce((a,x)=>a+Number(x.price||0),0),mnt=maintRows.reduce((a,x)=>a+Number(x.cost||0),0),other=trips.reduce((a,x)=>a+Number(x.other_cost||0),0),km=trips.reduce((a,x)=>a+Number(x.km||0),0),loadedMeters=trips.reduce((a,x)=>a+Number(x.loaded_meters||0),0);
  const byDriver={};
@@ -562,9 +686,78 @@ function exportDriverReportCSV(){
  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-driver-performance.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function printReport(){renderMonthlyReport();window.print();}
-function clearReportMonth(){document.getElementById('reportMonth').value='';renderMonthlyReport()}document.getElementById('reportMonth')?.addEventListener('change',renderMonthlyReport);document.getElementById('reportVehicle')?.addEventListener('change',renderMonthlyReport);async function resumeCloudSession(){try{const cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');if(!cfg.url||!cfg.key)return;sb=window.supabase.createClient(cfg.url,cfg.key);const {data,error}=await sb.auth.getSession();if(error||!data.session){sb=null;return;}const mem=await sb.from('members').select('company_id');if(mem.error){sb=null;return;}const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];if(!ids.length){sb=null;return;}if(ids.length===1)companyId=ids[0];else{const choices=await Promise.all(ids.map(async id=>{const c=await sb.from('companies').select('name').eq('id',id).single();return{id,name:c.data?.name||'شركة'};}));const saved=localStorage.getItem('asatuli_active_company');const chosen=choices.find(c=>c.id===saved)||choices[0];companyId=chosen.id;}cloudMode=true;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();document.body.classList.remove('auth-gate');try{render();}catch(uiError){console.error('Asatuli restored-session render failed',uiError);}try{renderMonthlyReport();}catch(reportError){console.error('Asatuli restored-session report failed',reportError);}try{await refreshAuditOwnerUI();}catch(auditError){console.warn('Asatuli restored-session audit controls failed',auditError);}if(typeof window.asatuliRouteByMembership==='function'){try{await window.asatuliRouteByMembership();}catch(routeError){console.error('Asatuli restored-session routing failed',routeError);if(typeof showFleetToast==='function')showFleetToast('تعذر فتح صفحة الحساب: '+(routeError.message||routeError),'error');}}try{window.startAsatuliRealtimeSync?.();}catch(syncError){console.warn('Asatuli restored-session realtime sync failed',syncError);}const sub=document.querySelector('.sub');if(sub)sub.textContent='نظرة عامة على عمليات أسطولك — متصل بالسحابة';}catch(e){console.warn('Cloud session resume failed',e);}}
-async function logoutCloud(){if(!cloudMode&&!sb){if(typeof showFleetToast==='function')showFleetToast('لا يوجد اتصال سحابي نشط.','warning');return;}try{try{await window.stopAsatuliRealtimeSync?.();}catch(stopError){console.warn('Asatuli realtime stop failed',stopError);}if(sb){const {error}=await sb.auth.signOut();if(error)throw error;}}catch(e){console.warn('Asatuli sign-out failed',e);try{window.startAsatuliRealtimeSync?.();}catch(restartError){console.warn('Asatuli realtime restart failed',restartError);}if(typeof showFleetToast==='function')showFleetToast('تعذر تسجيل الخروج بأمان: '+(e.message||e),'error');else alert('تعذر تسجيل الخروج: '+(e.message||e));return;}cloudMode=false;companyId=null;sb=null;localStorage.removeItem('asatuli_active_company');for(const key of ['vehicles','drivers','fuel','maintenance','trips'])store[key]=[];suppressLocalSave=true;try{render();if(typeof renderMonthlyReport==='function')renderMonthlyReport();}catch(clearError){console.warn('Asatuli view cleanup failed',clearError);}finally{suppressLocalSave=false;}const auditBtn=document.getElementById('auditLogBtn');if(auditBtn)auditBtn.style.display='none';const auditBox=document.getElementById('auditLog');if(auditBox)auditBox.textContent='';document.body.classList.add('auth-gate');openConnect();const status=document.getElementById('connectStatus');if(status)status.textContent='تم تسجيل الخروج. تم إخفاء بيانات الشركة من الجلسة الحالية.';}
-async function switchCompany(){if(!sb||!cloudMode){alert('سجّل الدخول إلى السحابة أولاً.');return;}try{const mem=await sb.from('members').select('company_id');if(mem.error)throw mem.error;const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];if(ids.length<2){alert('حسابك مرتبط بشركة واحدة فقط.');return;}const choices=await Promise.all(ids.map(async id=>{const r=await sb.from('companies').select('name').eq('id',id).single();return{id,name:r.data?.name||'شركة'};}));const choice=prompt('اختر رقم الشركة:\n'+choices.map((c,i)=>`${i+1}. ${c.name}`).join('\n'),'1');const n=Number(choice);if(!n||n<1||n>choices.length)return;companyId=choices[n-1].id;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();window.startAsatuliRealtimeSync?.();await refreshAuditOwnerUI();render();renderMonthlyReport();const sub=document.querySelector('.sub');if(sub)sub.textContent='متصل بالسحابة — '+choices[n-1].name;}catch(e){alert('تعذر تبديل الشركة: '+(e.message||e));}}renderMonthlyReport();</script><div class="modal" id="historyModal"><div class="modalbox"><h2 id="historyTitle">سجل المركبة</h2><div id="historyContent"></div><div class="actions"><button class="btn secondary" onclick="closeHistory()">إغلاق</button></div></div></div><script>
+function clearReportMonth(){document.getElementById('reportMonth').value='';renderMonthlyReport()}document.getElementById('reportMonth')?.addEventListener('change',renderMonthlyReport);document.getElementById('reportVehicle')?.addEventListener('change',renderMonthlyReport);window.asatuliRegisterScopeRefresher?.(renderMonthlyReport);async function resumeCloudSession(){try{const cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');if(!cfg.url||!cfg.key)return;sb=window.supabase.createClient(cfg.url,cfg.key);const {data,error}=await sb.auth.getSession();if(error||!data.session){sb=null;cloudUserId=null;return;}cloudUserId=data.session.user?.id||null;if(!cloudUserId){sb=null;return;}const mem=await sb.from('members').select('company_id');if(mem.error){sb=null;return;}const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];if(!ids.length){sb=null;return;}if(ids.length===1)companyId=ids[0];else{const choices=await Promise.all(ids.map(async id=>{const c=await sb.from('companies').select('name').eq('id',id).single();return{id,name:c.data?.name||'شركة'};}));const saved=localStorage.getItem('asatuli_active_company');const chosen=choices.find(c=>c.id===saved)||choices[0];companyId=chosen.id;}cloudMode=true;localStorage.setItem('asatuli_active_company',companyId);await loadCloud();window.asatuliRefreshScopedLocalData?.();document.body.classList.remove('auth-gate');try{render();}catch(uiError){console.error('Asatuli restored-session render failed',uiError);}try{renderMonthlyReport();}catch(reportError){console.error('Asatuli restored-session report failed',reportError);}try{await refreshAuditOwnerUI();}catch(auditError){console.warn('Asatuli restored-session audit controls failed',auditError);}if(typeof window.asatuliRouteByMembership==='function'){try{await window.asatuliRouteByMembership();}catch(routeError){console.error('Asatuli restored-session routing failed',routeError);if(typeof showFleetToast==='function')showFleetToast('تعذر فتح صفحة الحساب: '+(routeError.message||routeError),'error');}}try{window.startAsatuliRealtimeSync?.();}catch(syncError){console.warn('Asatuli restored-session realtime sync failed',syncError);}const sub=document.querySelector('.sub');if(sub)sub.textContent='نظرة عامة على عمليات أسطولك — متصل بالسحابة';}catch(e){console.warn('Cloud session resume failed',e);}}
+async function logoutCloud(){if(!cloudMode&&!sb){if(typeof showFleetToast==='function')showFleetToast('لا يوجد اتصال سحابي نشط.','warning');return;}try{try{await window.stopAsatuliRealtimeSync?.();}catch(stopError){console.warn('Asatuli realtime stop failed',stopError);}if(sb){const {error}=await sb.auth.signOut();if(error)throw error;}}catch(e){console.warn('Asatuli sign-out failed',e);try{window.startAsatuliRealtimeSync?.();}catch(restartError){console.warn('Asatuli realtime restart failed',restartError);}if(typeof showFleetToast==='function')showFleetToast('تعذر تسجيل الخروج بأمان: '+(e.message||e),'error');else alert('تعذر تسجيل الخروج: '+(e.message||e));return;}cloudMode=false;companyId=null;cloudUserId=null;sb=null;localStorage.removeItem('asatuli_active_company');for(const key of ['vehicles','drivers','fuel','maintenance','trips'])store[key]=[];suppressLocalSave=true;try{render();if(typeof renderMonthlyReport==='function')renderMonthlyReport();}catch(clearError){console.warn('Asatuli view cleanup failed',clearError);}finally{suppressLocalSave=false;}const auditBtn=document.getElementById('auditLogBtn');if(auditBtn)auditBtn.style.display='none';const auditBox=document.getElementById('auditLog');if(auditBox)auditBox.textContent='';document.body.classList.add('auth-gate');openConnect();const status=document.getElementById('connectStatus');if(status)status.textContent='تم تسجيل الخروج. تم إخفاء بيانات الشركة من الجلسة الحالية.';}
+async function switchCompany(){
+ if(!sb||!cloudMode){alert('سجّل الدخول إلى السحابة أولاً.');return;}
+ const previousCompanyId=companyId;
+ const previousActiveCompany=localStorage.getItem('asatuli_active_company');
+ const coreTables=['vehicles','drivers','fuel','maintenance','trips'];
+ const previousStore=Object.fromEntries(coreTables.map(key=>[key,store[key]]));
+ const app=document.querySelector('.app');
+ const previousInert=app?.inert??false;
+ const previousBusy=app?.getAttribute('aria-busy');
+ let realtimeStopped=false;
+ let overlay=null;
+ try{
+  const mem=await sb.from('members').select('company_id');
+  if(mem.error)throw mem.error;
+  const ids=[...new Set((mem.data||[]).map(x=>x.company_id))];
+  if(ids.length<2){alert('حسابك مرتبط بشركة واحدة فقط.');return;}
+  const choices=await Promise.all(ids.map(async id=>{
+   const r=await sb.from('companies').select('name').eq('id',id).single();
+   if(r.error)throw r.error;
+   return{id,name:r.data?.name||'شركة'};
+  }));
+  const choice=prompt('اختر رقم الشركة:\n'+choices.map((c,i)=>(i+1)+'. '+c.name).join('\n'),'1');
+  const n=Number(choice);
+  if(!choice||!n||n<1||n>choices.length)return;
+  const selected=choices[n-1];
+  if(selected.id===previousCompanyId)return;
+
+  await window.stopAsatuliRealtimeSync?.();
+  realtimeStopped=true;
+  if(app){app.inert=true;app.setAttribute('aria-busy','true');}
+  overlay=document.createElement('div');
+  overlay.setAttribute('role','status');
+  overlay.setAttribute('aria-live','polite');
+  overlay.textContent='جارٍ تحميل بيانات الشركة الجديدة...';
+  overlay.style.cssText='position:fixed;inset:0;z-index:2147482000;display:grid;place-items:center;padding:20px;background:rgba(5,20,40,.72);color:#fff;font:800 16px system-ui;text-align:center;backdrop-filter:blur(5px)';
+  document.body.appendChild(overlay);
+
+  companyId=selected.id;
+  localStorage.setItem('asatuli_active_company',companyId);
+  await loadCloud();
+  window.asatuliRefreshScopedLocalData?.();
+  await refreshAuditOwnerUI();
+  // Tear down any prior driver portal so a driver-to-driver company switch
+  // cannot reuse the previous company's captured vehicle and display state.
+  if(typeof window.asatuliShowManagerDashboard==='function')window.asatuliShowManagerDashboard();
+  if(typeof window.asatuliRouteByMembership==='function')await window.asatuliRouteByMembership();
+  render();
+  renderMonthlyReport();
+  if(typeof window.refreshOwnerTripInvoices==='function')window.refreshOwnerTripInvoices();
+  const sub=document.querySelector('.sub');
+  if(sub)sub.textContent='متصل بالسحابة — '+selected.name;
+  window.startAsatuliRealtimeSync?.();
+  realtimeStopped=false;
+  if(typeof showFleetToast==='function')showFleetToast('تم تبديل الشركة وتحميل بياناتها بنجاح.');
+ }catch(e){
+  companyId=previousCompanyId;
+  if(previousActiveCompany===null)localStorage.removeItem('asatuli_active_company');
+  else localStorage.setItem('asatuli_active_company',previousActiveCompany);
+  for(const key of coreTables)store[key]=previousStore[key];
+  window.asatuliRefreshScopedLocalData?.();
+  try{if(typeof window.asatuliRouteByMembership==='function')await window.asatuliRouteByMembership();}catch(routeError){console.error('Could not restore previous company route',routeError);}
+  try{await refreshAuditOwnerUI();}catch(auditError){console.warn('Could not restore previous company audit view',auditError);}
+  try{render();renderMonthlyReport();}catch(renderError){console.warn('Could not restore previous company view',renderError);}
+  if(realtimeStopped){try{window.startAsatuliRealtimeSync?.();}catch(syncError){console.warn('Could not restart previous company realtime sync',syncError);}}
+  alert('تعذر تبديل الشركة؛ أعدنا الشركة السابقة وبياناتها إلى الشاشة: '+(e.message||e));
+ }finally{
+  overlay?.remove();
+  if(app){app.inert=previousInert;if(previousBusy===null)app.removeAttribute('aria-busy');else app.setAttribute('aria-busy',previousBusy);}
+ }
+}renderMonthlyReport();</script><div class="modal" id="historyModal"><div class="modalbox"><h2 id="historyTitle">سجل المركبة</h2><div id="historyContent"></div><div class="actions"><button class="btn secondary" onclick="closeHistory()">إغلاق</button></div></div></div><script>
 function closeHistory(){document.getElementById('historyModal').classList.remove('open')}
 function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)return;const fuel=store.fuel.filter(x=>x.vehicle_id===id),maint=store.maintenance.filter(x=>x.vehicle_id===id),trips=store.trips.filter(x=>x.vehicle_id===id);const fc=fuel.reduce((a,x)=>a+Number(x.price||0),0),liters=fuel.reduce((a,x)=>a+Number(x.liters||0),0),mc=maint.reduce((a,x)=>a+Number(x.cost||0),0),rev=trips.reduce((a,x)=>a+Number(x.revenue||0),0),other=trips.reduce((a,x)=>a+Number(x.other_cost||0),0),km=trips.reduce((a,x)=>a+Number(x.km||0),0),costPerKm=km?(fc+mc+other)/km:0,fuelPer100=km&&liters?liters*100/km:0;let entries=[...fuel.map(x=>({day:x.day,type:'وقود',desc:`${x.liters||0} لتر`,amount:Number(x.price||0)})),...maint.map(x=>({day:x.day,type:'صيانة',desc:x.descr||'—',amount:Number(x.cost||0)})),...trips.map(x=>({day:x.day,type:'رحلة',desc:`${escHTML(dname(x.driver_id))} • ${x.km||0} كم`,amount:Number(x.other_cost||0),income:Number(x.revenue||0)}))].sort((a,b)=>(b.day||'').localeCompare(a.day||''));document.getElementById('historyTitle').textContent='سجل المركبة: '+v.plate;document.getElementById('historyContent').innerHTML=`<button class="btn secondary" onclick="printVehicleHistory(${jsArg(id)})">طباعة تقرير المركبة / PDF</button><div class="cards"><div class="card"><div class="label">إيرادات</div><div class="stat">${money(rev)}</div></div><div class="card"><div class="label">وقود</div><div class="stat">${money(fc)}</div><div class="sub">${money(liters)} لتر</div></div><div class="card"><div class="label">صيانة</div><div class="stat">${money(mc)}</div></div><div class="card"><div class="label">مصاريف أخرى</div><div class="stat">${money(other)}</div></div><div class="card"><div class="label">الكيلومترات</div><div class="stat">${km}</div><div class="sub">كم مسجل</div></div><div class="card"><div class="label">تكلفة الكيلومتر</div><div class="stat">${money(costPerKm)}</div><div class="sub">دينار/كم (تقريبية)</div></div><div class="card"><div class="label">استهلاك الوقود</div><div class="stat">${money(fuelPer100)}</div><div class="sub">لتر لكل 100 كم (تقديري)</div></div></div><p><b>صافي العمليات المسجلة:</b> ${money(rev-fc-mc-other)} دينار</p><div class="tablewrap"><table><thead><tr><th>التاريخ</th><th>النوع</th><th>التفاصيل</th><th>المبلغ</th><th>الإيراد</th></tr></thead><tbody>${entries.map(e=>`<tr><td>${escHTML(e.day||'—')}</td><td>${e.type}</td><td>${escHTML(e.desc)}</td><td>${money(e.amount)}</td><td>${money(e.income||0)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">لا توجد سجلات لهذه المركبة</td></tr>'}</tbody></table></div>`;document.getElementById('historyModal').classList.add('open')}
 </script>
@@ -705,11 +898,95 @@ const pendingTripStorageKey='asatuli:pending-trip:'+companyId+':'+vehicle.id+':'
 let pendingTripSubmissionId=localStorage.getItem(pendingTripStorageKey)||'';
 let pendingTripSnapshot='';
 function resetPendingTripSubmission(){pendingTripSubmissionId='';pendingTripSnapshot='';localStorage.removeItem(pendingTripStorageKey);}
+async function saveDriverRecordIdempotently(table,formKey,payload){
+ if(!sb||!companyId||!uid)throw new Error('جلسة السائق غير جاهزة. سجّل الدخول مرة أخرى.');
+ if(!globalThis.crypto||typeof globalThis.crypto.randomUUID!=='function')throw new Error('حدّث المتصفح حتى نتمكن من منع تكرار العملية.');
+ const storageKey='asatuli:pending-driver-record:'+companyId+':'+vehicle.id+':'+uid+':'+table+':'+formKey;
+ const snapshot=JSON.stringify(payload);
+ const pendingRaw=localStorage.getItem(storageKey);
+ let pending=null;
+ if(pendingRaw!==null){
+  try{pending=JSON.parse(pendingRaw);}catch(error){throw new Error('تعذر قراءة مفتاح حماية عملية سابقة. لا تعاود تسجيل العملية بقيم مختلفة؛ احتفظ بالبيانات واطلب مراجعة المسؤول.');}
+  if(!pending||typeof pending.id!=='string'||!pending.id||typeof pending.snapshot!=='string'){
+   throw new Error('بيانات محاولة الحفظ السابقة غير مكتملة. أوقفنا العملية لمنع إنشاء سجل مكرر.');
+  }
+  if(pending.snapshot!==snapshot){
+   throw new Error('هناك محاولة حفظ سابقة لم نتأكد من نتيجتها. أعد المحاولة بنفس البيانات أولاً قبل تعديلها، حتى لا يتكرر السجل.');
+  }
+ }else{
+  pending={id:globalThis.crypto.randomUUID(),snapshot};
+  localStorage.setItem(storageKey,JSON.stringify(pending));
+ }
+ const submissionId=pending.id;
+ const inserted=await sb.from(table).insert({...payload,submission_id:submissionId}).select('id');
+ let savedRow=inserted.data?.[0]||null;
+ if(inserted.error){
+  if(inserted.error.code!=='23505')throw inserted.error;
+  const duplicate=await sb.from(table).select('id')
+   .eq('company_id',payload.company_id)
+   .eq('vehicle_id',payload.vehicle_id)
+   .eq('submission_id',submissionId)
+   .maybeSingle();
+  if(duplicate.error)throw duplicate.error;
+  if(!duplicate.data)throw inserted.error;
+  savedRow=duplicate.data;
+ }
+ if(!savedRow)throw new Error('لم يتم تأكيد حفظ العملية في قاعدة البيانات. أعد المحاولة بنفس البيانات لتجنب التكرار.');
+ localStorage.removeItem(storageKey);
+ try{await loadCloud(table);}catch(refreshError){console.warn('Driver record saved, but immediate table refresh failed',refreshError);}
+ return savedRow;
+}
 function showDriverView(view){const home=document.getElementById('dpHome');if(home)home.style.display=view==='home'?'block':'none';document.querySelectorAll('#asatuliDriverPortal .dp-module').forEach(el=>{el.classList.toggle('active',el.id==='dpView'+({fuel:'Fuel',maint:'Maint',oil:'Oil',trip:'Trip'}[view]||''));});status.textContent='';portal.scrollIntoView({behavior:'smooth',block:'start'});}
 portal.querySelectorAll('[data-dp-view]').forEach(b=>b.addEventListener('click',()=>showDriverView(b.dataset.dpView)));
 portal.querySelectorAll('[data-dp-back]').forEach(b=>b.addEventListener('click',()=>showDriverView('home')));
-document.getElementById('dpFuelSave').onclick=async()=>{try{const liters=Number(document.getElementById('dpFuelLiters').value),price=Number(document.getElementById('dpFuelPrice').value),odo=Number(document.getElementById('dpFuelOdo').value);if(!document.getElementById('dpFuelDay').value||!liters||!price)throw Error('أدخل التاريخ واللترات والمبلغ');const {data:savedRows,error}=await sb.from('fuel').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpFuelDay').value,liters,price,odometer:odo||null,notes:document.getElementById('dpFuelNotes').value||null}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ التعبئة في قاعدة البيانات');status.textContent='تم حفظ التعبئة بنجاح.';alert('تم حفظ التعبئة بنجاح!');['dpFuelLiters','dpFuelPrice','dpFuelOdo','dpFuelNotes'].forEach(id=>document.getElementById(id).value='');}catch(e){status.textContent='تعذر الحفظ: '+(e.message||e);alert('تعذر حفظ التعبئة: '+(e.message||e));}};
-document.getElementById('dpMaintSave').onclick=async()=>{try{const descr=document.getElementById('dpMaintDescr').value.trim(),cost=Number(document.getElementById('dpMaintCost').value);if(!descr||!document.getElementById('dpMaintDay').value||!Number.isFinite(cost))throw Error('أدخل التاريخ والوصف والكلفة');const {data:savedRows,error}=await sb.from('maintenance').insert({company_id:companyId,vehicle_id:vehicle.id,day:document.getElementById('dpMaintDay').value,descr,cost,next_date:document.getElementById('dpMaintNext').value||null,attachments:[],notes:document.getElementById('dpMaintNotes').value||null}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ الصيانة في قاعدة البيانات');status.textContent='✅ تم حفظ الصيانة بنجاح.';alert('تم حفظ الصيانة بنجاح!');document.getElementById('dpMaintDescr').value='';document.getElementById('dpMaintCost').value='';}catch(e){status.textContent='❌ تعذر حفظ الصيانة: '+(e.message||e);alert('تعذر حفظ الصيانة: '+(e.message||e));}};document.getElementById('dpTripSave').onclick=async()=>{
+document.getElementById('dpFuelSave').onclick=async()=>{
+ const button=document.getElementById('dpFuelSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const day=document.getElementById('dpFuelDay').value;
+  const litersText=document.getElementById('dpFuelLiters').value.trim();
+  const priceText=document.getElementById('dpFuelPrice').value.trim();
+  const odoText=document.getElementById('dpFuelOdo').value.trim();
+  const liters=Number(litersText),price=Number(priceText),odo=Number(odoText);
+  if(!day||!litersText||!priceText||!Number.isFinite(liters)||liters<=0||!Number.isFinite(price)||price<0||
+     (odoText!==''&&(!Number.isFinite(odo)||odo<0)))throw Error('أدخل التاريخ واللترات والمبلغ بشكل صحيح. يمكن أن يكون مبلغ التعبئة صفراً.');
+  await saveDriverRecordIdempotently('fuel','fuel',{
+   company_id:companyId,vehicle_id:vehicle.id,day,liters,price,
+   odometer:odoText===''?null:odo,notes:document.getElementById('dpFuelNotes').value||null
+  });
+  status.textContent='تم حفظ التعبئة بنجاح.';
+  alert('تم حفظ التعبئة بنجاح!');
+  ['dpFuelLiters','dpFuelPrice','dpFuelOdo','dpFuelNotes'].forEach(id=>document.getElementById(id).value='');
+ }catch(e){
+  status.textContent='تعذر الحفظ: '+(e.message||e);
+  alert('تعذر حفظ التعبئة: '+(e.message||e));
+ }finally{button.disabled=false;}
+};
+document.getElementById('dpMaintSave').onclick=async()=>{
+ const button=document.getElementById('dpMaintSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const descr=document.getElementById('dpMaintDescr').value.trim();
+  const day=document.getElementById('dpMaintDay').value;
+  const costText=document.getElementById('dpMaintCost').value.trim();
+  const cost=Number(costText);
+  if(!descr||!day||costText===''||!Number.isFinite(cost)||cost<0)throw Error('أدخل التاريخ والوصف والكلفة بشكل صحيح.');
+  await saveDriverRecordIdempotently('maintenance','maintenance',{
+   company_id:companyId,vehicle_id:vehicle.id,day,descr,cost,
+   next_date:document.getElementById('dpMaintNext').value||null,
+   attachments:[],notes:document.getElementById('dpMaintNotes').value||null
+  });
+  status.textContent='✅ تم حفظ الصيانة بنجاح.';
+  alert('تم حفظ الصيانة بنجاح!');
+  document.getElementById('dpMaintDescr').value='';
+  document.getElementById('dpMaintCost').value='';
+ }catch(e){
+  status.textContent='❌ تعذر حفظ الصيانة: '+(e.message||e);
+  alert('تعذر حفظ الصيانة: '+(e.message||e));
+ }finally{button.disabled=false;}
+};document.getElementById('dpTripSave').onclick=async()=>{
 if(tripSubmitButton.disabled)return;
 tripSubmitButton.disabled=true;
 tripFormFields.forEach(field=>field.disabled=true);
@@ -770,7 +1047,33 @@ status.textContent='❌ تعذر حفظ الرحلة: '+(e.message||String(e));a
  tripSubmitButton.disabled=false;
  tripFormFields.forEach(field=>field.disabled=false);
 }
-};document.getElementById('dpOilSave').onclick=async()=>{try{const day=document.getElementById('dpOilDay').value,type=document.getElementById('dpOilType').value.trim(),odo=Number(document.getElementById('dpOilOdo').value),cost=Number(document.getElementById('dpOilCost').value),nextOdo=document.getElementById('dpOilNextOdo').value,notes=document.getElementById('dpOilNotes').value.trim();if(!day||!type||!Number.isFinite(odo)||odo<0||!Number.isFinite(cost)||cost<0)throw Error('أدخل التاريخ ونوع الزيت والعداد والكلفة بشكل صحيح');const oilNotes='عداد وقت التغيير: '+odo+' كم'+(nextOdo?' | العداد القادم: '+nextOdo+' كم':'')+(notes?' | '+notes:'');const {data:savedRows,error}=await sb.from('maintenance').insert({company_id:companyId,vehicle_id:vehicle.id,day,descr:'تغيير زيت المحرك - '+type,cost,next_date:null,attachments:[],notes:oilNotes}).select('id');if(error)throw error;if(!savedRows?.length)throw new Error('لم يتم تأكيد حفظ تغيير الزيت في قاعدة البيانات');status.textContent='✅ تم تسجيل تغيير الزيت بنجاح.';alert('تم تسجيل تغيير الزيت بنجاح!');['dpOilType','dpOilOdo','dpOilCost','dpOilNextOdo','dpOilNotes'].forEach(id=>document.getElementById(id).value='');}catch(e){status.textContent='تعذر تسجيل تغيير الزيت: '+(e.message||e)}};document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
+};document.getElementById('dpOilSave').onclick=async()=>{
+ const button=document.getElementById('dpOilSave');
+ if(button.disabled)return;
+ button.disabled=true;
+ try{
+  const day=document.getElementById('dpOilDay').value;
+  const type=document.getElementById('dpOilType').value.trim();
+  const odoText=document.getElementById('dpOilOdo').value.trim();
+  const costText=document.getElementById('dpOilCost').value.trim();
+  const odo=Number(odoText),cost=Number(costText);
+  const nextOdo=document.getElementById('dpOilNextOdo').value;
+  const notes=document.getElementById('dpOilNotes').value.trim();
+  if(!day||!type||odoText===''||costText===''||!Number.isFinite(odo)||odo<0||!Number.isFinite(cost)||cost<0)
+   throw Error('أدخل التاريخ ونوع الزيت والعداد والكلفة بشكل صحيح.');
+  const oilNotes='عداد وقت التغيير: '+odo+' كم'+(nextOdo?' | العداد القادم: '+nextOdo+' كم':'')+(notes?' | '+notes:'');
+  await saveDriverRecordIdempotently('maintenance','oil',{
+   company_id:companyId,vehicle_id:vehicle.id,day,
+   descr:'تغيير زيت المحرك - '+type,cost,next_date:null,attachments:[],notes:oilNotes
+  });
+  status.textContent='✅ تم تسجيل تغيير الزيت بنجاح.';
+  alert('تم تسجيل تغيير الزيت بنجاح!');
+  ['dpOilType','dpOilOdo','dpOilCost','dpOilNextOdo','dpOilNotes'].forEach(id=>document.getElementById(id).value='');
+ }catch(e){
+  status.textContent='تعذر تسجيل تغيير الزيت: '+(e.message||e);
+  alert('تعذر تسجيل تغيير الزيت: '+(e.message||e));
+ }finally{button.disabled=false;}
+};document.getElementById('dpLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
 }catch(e){console.warn('Driver portal bootstrap',e);if(driverMode){const fallback=document.createElement('section');fallback.id='asatuliDriverPortalError';fallback.style.cssText='max-width:640px;margin:24px auto;padding:20px;background:#fff;border:1px solid #ddd;border-radius:14px;color:#222';fallback.innerHTML='<h2>بوابة السائق</h2><p>'+escHTML(e?.message||'تعذر تحميل بيانات السائق')+'</p><button id="dpErrorLogout" style="padding:12px 18px;background:#a83238;color:#fff;border:0;border-radius:10px">تسجيل خروج</button>';document.body.appendChild(fallback);document.getElementById('dpErrorLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};}}};
 </script>
 
@@ -792,11 +1095,11 @@ status.textContent='❌ تعذر حفظ الرحلة: '+(e.message||String(e));a
   add('المركبات (حقول ناقصة)',store.vehicles.filter(x=>!String(x.plate||'').trim()||!String(x.type||'').trim()).map(x=>x.plate||('مركبة '+(x.id||''))));
   add('لوحات مكررة',[...new Set(dupPlates)]);
   add('السائقون (حقول ناقصة)',store.drivers.filter(x=>!String(x.name||'').trim()||!x.license_exp).map(x=>x.name||('سائق '+(x.id||''))));
-  add('تواريخ غير صحيحة — المركبات',store.vehicles.filter(x=>[x.insurance_exp,x.license_exp,x.next_maintenance].some(v=>v&&!validDate(v))).map(x=>x.plate||('مركبة '+(x.id||''))));
+  add('تواريخ غير صحيحة — المركبات',store.vehicles.filter(x=>[x.insurance,x.license,x.next_maint].some(v=>v&&!validDate(v))).map(x=>x.plate||('مركبة '+(x.id||''))));
   add('تواريخ غير صحيحة — السائقون',store.drivers.filter(x=>[x.license_exp,x.id_exp].some(v=>v&&!validDate(v))).map(x=>x.name||('سائق '+(x.id||''))));
-  add('الوقود (بيانات ناقصة أو غير صحيحة)',store.fuel.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.liters)||!numeric(x.price)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
+  add('الوقود (بيانات ناقصة أو غير صحيحة)',store.fuel.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.liters,false)||!numeric(x.price)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
   add('الصيانة (بيانات ناقصة أو غير صحيحة)',store.maintenance.filter(x=>!validDate(x.day)||!x.vehicle_id||!numeric(x.cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
-  add('الرحلات (بيانات ناقصة أو غير صحيحة)',store.trips.filter(x=>!validDate(x.day)||!x.vehicle_id||!x.driver_id||!numeric(x.km)||!numeric(x.revenue)||!numeric(x.other_cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
+  add('الرحلات (بيانات ناقصة أو غير صحيحة)',store.trips.filter(x=>!validDate(x.day)||!x.vehicle_id||!x.driver_id||!numeric(x.km,false)||!numeric(x.revenue)||!numeric(x.other_cost)).map(x=>vname(x.vehicle_id)+' ('+(x.day||'بدون تاريخ')+')'));
   const total=issues.length;return `<div class="sub">${total?`<strong>يوجد ${total} نوع من التنبيهات المتعلقة بجودة البيانات.</strong><ul>${issues.join('')}</ul>`:'<strong>ممتاز! لم تظهر نواقص أو مخالفات واضحة في الفحوص المحددة.</strong>'}<p>هذه مراجعة للحقول المحددة فقط، ولا تعدّل السجلات تلقائياً. قد تحتاج البيانات القديمة مراجعة يدوية.</p></div>`;
  }
  render=function(){baseRender();const box=document.getElementById('dataQuality');if(box)box.innerHTML='<h2>🔎 جودة واكتمال البيانات</h2>'+qualityHTML();};
@@ -831,7 +1134,7 @@ status.textContent='❌ تعذر حفظ الرحلة: '+(e.message||String(e));a
  const dash=document.getElementById('dash');if(!dash)return;
  const panel=document.createElement('section');panel.className='card section';panel.id='incidentRecurrenceExportPanel';panel.innerHTML='<h2>📤 تصدير الأعطال المتكررة</h2><div class="sub">تنزيل تقرير CSV يتضمن المركبة ونوع العطل وعدد التكرارات والحالات المفتوحة والكلفة المسجلة.</div><button type="button" id="exportIncidentRecurrenceBtn">تنزيل تقرير التكرار CSV</button><div id="incidentRecurrenceExportMsg" class="sub"></div>';dash.appendChild(panel);
  const btn=document.getElementById('exportIncidentRecurrenceBtn');btn.addEventListener('click',function(){
- let a=[];try{a=JSON.parse(localStorage.getItem('asatuli_incidents')||'[]')}catch{}
+ let a=[];try{a=JSON.parse(fleetLocalGetItem('asatuli_incidents')||'[]')}catch{}
  const g={};a.forEach(x=>{const k=(x.plate||'مركبة غير محددة')+'|'+(x.type||'نوع غير محدد');g[k]??={plate:x.plate||'مركبة غير محددة',type:x.type||'نوع غير محدد',count:0,open:0,cost:0};g[k].count++;if(x.status!=='تمت المعالجة')g[k].open++;g[k].cost+=Number(x.cost||0)});
  const rows=Object.values(g).filter(x=>x.count>=2).sort((x,y)=>y.count-x.count||y.cost-x.cost);
  const csv=['المركبة,نوع العطل,عدد التكرارات,بلاغات مفتوحة,الكلفة (د.أ)',...rows.map(x=>[x.plate,x.type,x.count,x.open,x.cost.toFixed(3)].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','))].join('\r\n');
@@ -938,7 +1241,7 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  const dash=document.getElementById('dash');if(dash)dash.appendChild(panel);
  const base=['التأكد من جاهزية المركبات','توزيع السائقين والمهام','متابعة الوقود','مراجعة الرحلات المسجلة','التأكد من الأعطال والصيانة'];
  function dateKey(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
- function key(){return 'asatuli_dispatch_check_'+dateKey()}
+ function key(){return fleetLocalStorageKey('asatuli_dispatch_check_'+dateKey())}
  function fallback(){return {tasks:base.map((t,i)=>({id:'b'+i,text:t,done:false}))}}
  function read(){try{let x=JSON.parse(localStorage.getItem(key())||'null');if(!x||typeof x!=='object'||Array.isArray(x)||!Array.isArray(x.tasks)||x.tasks.length>500)return fallback();const ids=new Set();if(!x.tasks.every(t=>t&&typeof t==='object'&&!Array.isArray(t)&&typeof t.id==='string'&&t.id.length<=160&&typeof t.text==='string'&&t.text.trim().length>0&&t.text.length<=1000&&typeof t.done==='boolean'&&!ids.has(t.id)&&ids.add(t.id)))return fallback();return {tasks:x.tasks}}catch{return fallback()}}
  function write(x){try{localStorage.setItem(key(),JSON.stringify(x));draw()}catch(e){alert('تعذر حفظ قائمة التشغيل. قد تكون مساحة التخزين ممتلئة.')}}
@@ -946,7 +1249,7 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  window.addDispatchTask=function(){const inp=document.getElementById('dispatchTaskInput'),text=inp.value.trim();if(!text)return;if(text.length>1000){alert('المهمة طويلة جداً (الحد 1000 حرف).');return;}const x=read();if(x.tasks.length>=500){alert('وصلت القائمة للحد الأعلى من المهام (500).');return;}x.tasks.push({id:'t'+Date.now()+'-'+Math.random().toString(36).slice(2,7),text,done:false});inp.value='';write(x)};
  window.toggleDispatchTask=function(id,done){const x=read();const t=x.tasks.find(t=>t.id===id);if(t)t.done=done;write(x)};
  window.deleteDispatchTask=function(id){const x=read();x.tasks=x.tasks.filter(t=>t.id!==id);write(x)};
- window.resetDispatchChecklist=function(){if(!confirm('إعادة ضبط قائمة اليوم وإلغاء الإنجاز؟'))return;localStorage.removeItem(key());draw()};draw();
+ window.resetDispatchChecklist=function(){if(!confirm('إعادة ضبط قائمة اليوم وإلغاء الإنجاز؟'))return;localStorage.removeItem(key());draw()};draw();window.asatuliRegisterScopeRefresher?.(draw);
 })()
 </script>
 ;
@@ -961,11 +1264,11 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  const checks=['الإطارات وضغط الهواء','الفرامل','الأنوار والإشارات','الزيوت والسوائل','التسريب أسفل المركبة','المرايا والزجاج','معدات السلامة','نظافة وجاهزية المركبة'];
  const esc=window.escHTML||((x)=>String(x));
  function renderInspection(){const v=document.getElementById('inspVehicle'),d=document.getElementById('inspDriver');if(!v||!d)return;v.innerHTML='<option value="">اختر المركبة</option>'+(store.vehicles||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.plate)}</option>`).join('');d.innerHTML='<option value="">اختر السائق</option>'+(store.drivers||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('');document.getElementById('inspItems').innerHTML=checks.map((c,i)=>`<label style="display:flex;gap:8px;padding:8px;border:1px solid var(--border,#ddd);border-radius:9px;margin:6px 0"><input type="checkbox" id="insp${i}"><span>${esc(c)}</span></label>`).join('');drawHistory();}
- function records(){try{return JSON.parse(localStorage.getItem('asatuli_inspections')||'[]')}catch{return[]}}
+ function records(){try{return JSON.parse(fleetLocalGetItem('asatuli_inspections')||'[]')}catch{return[]}}
  function drawHistory(){const arr=records().slice(-10).reverse(),box=document.getElementById('inspHistory');if(!box)return;box.innerHTML='<h3>آخر الفحوصات</h3>'+(arr.length?arr.map(x=>`<div style="padding:8px;border:1px solid var(--border,#ddd);border-radius:9px;margin:6px 0"><b>${esc(x.plate)}</b> — ${esc(x.driver||'بدون سائق')} — ${esc(x.date)}<div class="sub">${x.failed.length?'ملاحظات على: '+x.failed.map(esc).join('، '):'جميع البنود المحددة سليمة'}${x.notes?' | '+esc(x.notes):''}</div></div>`).join(''):'<div class="sub">لا توجد فحوصات مسجلة.</div>');}
- window.saveVehicleInspection=function(){const vid=document.getElementById('inspVehicle').value;if(!vid){alert('اختر المركبة أولاً');return;}const vehicle=store.vehicles.find(x=>x.id===vid),driver=store.drivers.find(x=>x.id===document.getElementById('inspDriver').value);const failed=checks.filter((c,i)=>!document.getElementById('insp'+i).checked);const arr=records();arr.push({id:'insp_'+Date.now(),date:new Date().toISOString(),vehicle_id:vid,plate:vehicle?.plate||'',driver:driver?.name||'',failed,notes:document.getElementById('inspNotes').value.trim()});localStorage.setItem('asatuli_inspections',JSON.stringify(arr));document.getElementById('inspNotes').value='';checks.forEach((c,i)=>document.getElementById('insp'+i).checked=false);drawHistory();alert(failed.length?'تم حفظ الفحص مع بنود غير مؤكدة/غير محددة.':'تم حفظ الفحص.');};
+ window.saveVehicleInspection=function(){const vid=document.getElementById('inspVehicle').value;if(!vid){alert('اختر المركبة أولاً');return;}const vehicle=store.vehicles.find(x=>x.id===vid),driver=store.drivers.find(x=>x.id===document.getElementById('inspDriver').value);const failed=checks.filter((c,i)=>!document.getElementById('insp'+i).checked);const arr=records();arr.push({id:'insp_'+Date.now(),date:new Date().toISOString(),vehicle_id:vid,plate:vehicle?.plate||'',driver:driver?.name||'',failed,notes:document.getElementById('inspNotes').value.trim()});fleetLocalSetItem('asatuli_inspections',JSON.stringify(arr));document.getElementById('inspNotes').value='';checks.forEach((c,i)=>document.getElementById('insp'+i).checked=false);drawHistory();alert(failed.length?'تم حفظ الفحص مع بنود غير مؤكدة/غير محددة.':'تم حفظ الفحص.');};
  window.exportVehicleInspections=function(){const arr=records(),rows=[['التاريخ','المركبة','السائق','بنود لم يتم تأكيدها','ملاحظات']];arr.forEach(x=>rows.push([new Date(x.date).toLocaleString('ar'),x.plate,x.driver,x.failed.join('؛ '),x.notes]));const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='vehicle-inspections.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- renderInspection();const old=window.render;window.render=function(){if(typeof old==='function')old.apply(this,arguments);renderInspection();};
+ renderInspection();window.asatuliRegisterScopeRefresher?.(renderInspection);const old=window.render;window.render=function(){if(typeof old==='function')old.apply(this,arguments);renderInspection();};
 }catch(e){console.warn('Inspection checklist error',e)}})();
 </script>
 <script>
@@ -974,13 +1277,13 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  if(document.getElementById('fleetIncidentPanel'))return;
  const dash=document.getElementById('dash');if(!dash)return;
  const panel=document.createElement('section');panel.className='card section';panel.id='fleetIncidentPanel';panel.innerHTML=`<h2>🚨 سجل الحوادث والأعطال</h2><div class="sub">سجّل الحوادث أو الأعطال واربطها بالمركبة. السجل محفوظ محلياً على هذا الجهاز.</div><div style="display:grid;gap:9px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"><label>المركبة<select id="incVehicle"></select></label><label>التاريخ<input type="date" id="incDate"></label><label>نوع البلاغ<select id="incType"><option>عطل</option><option>حادث</option><option>مخالفة</option><option>ملاحظة تشغيلية</option></select></label><label>درجة الحالة<select id="incSeverity"><option>بسيطة</option><option>متوسطة</option><option>خطيرة</option></select></label><label>الكلفة (دينار)<input type="number" step="0.001" min="0" id="incCost" value="0"></label><label>الحالة<select id="incStatus"><option>مفتوحة</option><option>قيد المعالجة</option><option>تمت المعالجة</option></select></label></div><label>وصف البلاغ<textarea id="incDesc" rows="2" style="width:100%" placeholder="وصف العطل أو الحادث أو المخالفة"></textarea></label><button class="btn" onclick="saveFleetIncident()">حفظ البلاغ</button> <button class="btn secondary" onclick="exportFleetIncidents()">تصدير CSV</button><div id="incHistory" style="margin-top:12px"></div>`;dash.appendChild(panel);
- const esc=window.escHTML||((x)=>String(x));const records=()=>{try{return JSON.parse(localStorage.getItem('asatuli_incidents')||'[]')}catch{return[]}};
+ const esc=window.escHTML||((x)=>String(x));const records=()=>{try{return JSON.parse(fleetLocalGetItem('asatuli_incidents')||'[]')}catch{return[]}};
  function fill(){const s=document.getElementById('incVehicle');if(!s)return;const old=s.value;s.innerHTML='<option value="">اختر المركبة</option>'+(store.vehicles||[]).map(v=>`<option value="${esc(v.id)}">${esc(v.plate)}</option>`).join('');if(old)s.value=old;const date=document.getElementById('incDate');if(date&&!date.value)date.value=localDateKey();draw();}
  function draw(){const box=document.getElementById('incHistory');if(!box)return;const a=records().slice().sort((x,y)=>y.date.localeCompare(x.date)).slice(0,15);box.innerHTML='<h3>آخر البلاغات</h3>'+(a.length?a.map(x=>`<div style="padding:9px;border:1px solid var(--border,#ddd);border-radius:10px;margin:7px 0"><b>${esc(x.plate)}</b> — ${esc(x.type)} — ${esc(x.date)}<div class="sub">${esc(x.severity)} | ${esc(x.status)} | كلفة: ${Number(x.cost||0).toFixed(3)} دينار</div><div>${esc(x.desc||'بدون وصف')}</div><button class="btn secondary" onclick="setFleetIncidentStatus(${jsArg(x.id)})">تغيير الحالة</button> <button class="btn secondary" onclick="deleteFleetIncident(${jsArg(x.id)})">حذف</button></div>`).join(''):'<div class="sub">لا توجد بلاغات مسجلة.</div>');}
- window.saveFleetIncident=function(){const vid=document.getElementById('incVehicle').value;if(!vid){alert('اختر المركبة');return;}const v=store.vehicles.find(x=>x.id===vid);const desc=document.getElementById('incDesc').value.trim();if(!desc){alert('اكتب وصف البلاغ');return;}const a=records();a.push({id:'incident_'+Date.now(),vehicle_id:vid,plate:v?.plate||'',date:document.getElementById('incDate').value,type:document.getElementById('incType').value,severity:document.getElementById('incSeverity').value,cost:Number(document.getElementById('incCost').value||0),status:document.getElementById('incStatus').value,desc});localStorage.setItem('asatuli_incidents',JSON.stringify(a));document.getElementById('incDesc').value='';document.getElementById('incCost').value='0';draw();alert('تم حفظ البلاغ');};
- window.setFleetIncidentStatus=function(id){const a=records(),x=a.find(r=>r.id===id);if(!x)return;const next=['مفتوحة','قيد المعالجة','تمت المعالجة'],idx=next.indexOf(x.status);x.status=next[(idx+1)%next.length];localStorage.setItem('asatuli_incidents',JSON.stringify(a));draw();};window.deleteFleetIncident=function(id){if(!confirm('حذف البلاغ؟'))return;localStorage.setItem('asatuli_incidents',JSON.stringify(records().filter(x=>x.id!==id)));draw();};
+ window.saveFleetIncident=function(){const vid=document.getElementById('incVehicle').value;if(!vid){alert('اختر المركبة');return;}const v=store.vehicles.find(x=>x.id===vid);const desc=document.getElementById('incDesc').value.trim();if(!desc){alert('اكتب وصف البلاغ');return;}const a=records();a.push({id:'incident_'+Date.now(),vehicle_id:vid,plate:v?.plate||'',date:document.getElementById('incDate').value,type:document.getElementById('incType').value,severity:document.getElementById('incSeverity').value,cost:Number(document.getElementById('incCost').value||0),status:document.getElementById('incStatus').value,desc});fleetLocalSetItem('asatuli_incidents',JSON.stringify(a));document.getElementById('incDesc').value='';document.getElementById('incCost').value='0';draw();alert('تم حفظ البلاغ');};
+ window.setFleetIncidentStatus=function(id){const a=records(),x=a.find(r=>r.id===id);if(!x)return;const next=['مفتوحة','قيد المعالجة','تمت المعالجة'],idx=next.indexOf(x.status);x.status=next[(idx+1)%next.length];fleetLocalSetItem('asatuli_incidents',JSON.stringify(a));draw();};window.deleteFleetIncident=function(id){if(!confirm('حذف البلاغ؟'))return;fleetLocalSetItem('asatuli_incidents',JSON.stringify(records().filter(x=>x.id!==id)));draw();};
  window.exportFleetIncidents=function(){const a=records(),rows=[['التاريخ','المركبة','النوع','الدرجة','الحالة','الكلفة','الوصف'],...a.map(x=>[x.date,x.plate,x.type,x.severity,x.status,x.cost,x.desc])];const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n'),blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),el=document.createElement('a');el.href=url;el.download='fleet-incidents.csv';el.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- fill();const old=window.render;if(typeof old==='function')window.render=function(){old.apply(this,arguments);fill();};
+ fill();window.asatuliRegisterScopeRefresher?.(fill);const old=window.render;if(typeof old==='function')window.render=function(){old.apply(this,arguments);fill();};
 }catch(e){console.warn('Incident log module error',e)}})();
 </script>
 <script>
@@ -990,9 +1293,9 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  const dash=document.getElementById('dash');if(!dash)return;
  const panel=document.createElement('section');panel.className='card section';panel.id='incidentSummaryPanel';panel.innerHTML='<h2>📌 ملخص الأعطال والحوادث</h2><div id="incidentSummaryContent"></div>';dash.appendChild(panel);
  const esc=window.escHTML||((x)=>String(x));
- function get(){try{return JSON.parse(localStorage.getItem('asatuli_incidents')||'[]')}catch{return[]}}
+ function get(){try{return JSON.parse(fleetLocalGetItem('asatuli_incidents')||'[]')}catch{return[]}}
  function draw(){const box=document.getElementById('incidentSummaryContent');if(!box)return;const a=get(),open=a.filter(x=>x.status!=='تمت المعالجة'),urgent=open.filter(x=>x.severity==='خطيرة'),month=(window.localMonthKey?window.localMonthKey():(()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`})()),monthly=a.filter(x=>(x.date||'').slice(0,7)===month),cost=monthly.reduce((s,x)=>s+Number(x.cost||0),0);box.innerHTML=`<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))"><div class="card"><b>بلاغات مفتوحة</b><div style="font-size:1.6em">${open.length}</div></div><div class="card"><b>حالات خطيرة مفتوحة</b><div style="font-size:1.6em;color:#c0392b">${urgent.length}</div></div><div class="card"><b>بلاغات هذا الشهر</b><div style="font-size:1.6em">${monthly.length}</div></div><div class="card"><b>كلفة البلاغات هذا الشهر</b><div style="font-size:1.6em">${cost.toFixed(3)} د.أ</div></div></div>`+(urgent.length?'<h3 style="margin-top:12px">⚠️ الحالات الخطيرة المفتوحة</h3>'+urgent.map(x=>`<div style="border:1px solid #c0392b;border-radius:10px;padding:9px;margin:6px 0"><b>${esc(x.plate||'مركبة')}</b> — ${esc(x.date||'')} — ${esc(x.type||'')}<div>${esc(x.desc||'')}</div><small>${esc(x.status)}</small></div>`).join(''):'<div class="sub" style="margin-top:10px">لا توجد حالات خطيرة مفتوحة مسجلة.</div>');}
- draw();const old=window.render;if(typeof old==='function')window.render=function(){old.apply(this,arguments);draw();};window.drawIncidentSummary=draw;
+ draw();window.asatuliRegisterScopeRefresher?.(draw);const old=window.render;if(typeof old==='function')window.render=function(){old.apply(this,arguments);draw();};window.drawIncidentSummary=draw;
 }catch(e){console.warn('Incident summary module error',e)}})();
 </script>
 <script>
@@ -1002,8 +1305,8 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  const dash=document.getElementById('dash');if(!dash)return;
  const panel=document.createElement('section');panel.className='card section';panel.id='incidentRecurrencePanel';panel.innerHTML='<h2>🔁 تحليل تكرار الأعطال</h2><div class="sub">يعرض المركبات وأنواع البلاغات التي تكررت في السجل المحلي.</div><div id="incidentRecurrenceContent"></div>';dash.appendChild(panel);
  const esc=window.escHTML||((x)=>csvSafe(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
- function draw(){const box=document.getElementById('incidentRecurrenceContent');if(!box)return;let a=[];try{a=JSON.parse(localStorage.getItem('asatuli_incidents')||'[]')}catch{};const grouped={};a.forEach(x=>{const key=(x.plate||'مركبة غير محددة')+'|'+(x.type||'نوع غير محدد');grouped[key]??={plate:x.plate||'مركبة غير محددة',type:x.type||'نوع غير محدد',count:0,open:0,cost:0};grouped[key].count++;if(x.status!=='تمت المعالجة')grouped[key].open++;grouped[key].cost+=Number(x.cost||0)});const rows=Object.values(grouped).filter(x=>x.count>=2).sort((x,y)=>y.count-x.count||y.cost-x.cost);box.innerHTML=rows.length?rows.map(x=>`<div style="border:1px solid var(--border,#ddd);border-radius:10px;padding:10px;margin:8px 0"><b>${esc(x.plate)}</b><div>${esc(x.type)} — تكرر <b>${x.count}</b> مرات</div><small>بلاغات غير مغلقة: ${x.open} | كلفة مسجلة: ${x.cost.toFixed(3)} د.أ</small></div>`).join(''):'<div class="sub">لا يوجد نوع عطل متكرر مرتين أو أكثر حتى الآن.</div>'}
- draw();const old=window.render;if(typeof old==='function'&&!old.__recurrenceWrapped){window.render=function(){old.apply(this,arguments);draw()};window.render.__recurrenceWrapped=true;}window.drawIncidentRecurrence=draw;
+ function draw(){const box=document.getElementById('incidentRecurrenceContent');if(!box)return;let a=[];try{a=JSON.parse(fleetLocalGetItem('asatuli_incidents')||'[]')}catch{};const grouped={};a.forEach(x=>{const key=(x.plate||'مركبة غير محددة')+'|'+(x.type||'نوع غير محدد');grouped[key]??={plate:x.plate||'مركبة غير محددة',type:x.type||'نوع غير محدد',count:0,open:0,cost:0};grouped[key].count++;if(x.status!=='تمت المعالجة')grouped[key].open++;grouped[key].cost+=Number(x.cost||0)});const rows=Object.values(grouped).filter(x=>x.count>=2).sort((x,y)=>y.count-x.count||y.cost-x.cost);box.innerHTML=rows.length?rows.map(x=>`<div style="border:1px solid var(--border,#ddd);border-radius:10px;padding:10px;margin:8px 0"><b>${esc(x.plate)}</b><div>${esc(x.type)} — تكرر <b>${x.count}</b> مرات</div><small>بلاغات غير مغلقة: ${x.open} | كلفة مسجلة: ${x.cost.toFixed(3)} د.أ</small></div>`).join(''):'<div class="sub">لا يوجد نوع عطل متكرر مرتين أو أكثر حتى الآن.</div>'}
+ draw();window.asatuliRegisterScopeRefresher?.(draw);const old=window.render;if(typeof old==='function'&&!old.__recurrenceWrapped){window.render=function(){old.apply(this,arguments);draw()};window.render.__recurrenceWrapped=true;}window.drawIncidentRecurrence=draw;
 }catch(e){console.warn('Incident recurrence module error',e)}})();
 </script>
 <script>
@@ -1080,12 +1383,12 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
  if(document.getElementById('fleetDailyChecklist'))return;
  const dash=document.getElementById('dash');if(!dash)return;
  const items=['فحص المركبات قبل التشغيل','التأكد من رخص السائقين','مراجعة الوقود','مراجعة الصيانة المستحقة','تأكيد الرحلات اليومية','تسجيل أي حادث أو عطل'];
- const key='asatuli_daily_check_'+localDateKey();
- let checked={};try{checked=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){}
+ function key(){return fleetLocalStorageKey('asatuli_daily_check_'+localDateKey())}
+ function readChecked(){try{return JSON.parse(localStorage.getItem(key())||'{}')}catch(e){return {}}}
  const panel=document.createElement('section');panel.className='card section';panel.id='fleetDailyChecklist';panel.innerHTML='<h2>✅ قائمة التجهيز اليومية</h2><div class="sub">قائمة متابعة على هذا الجهاز لهذا اليوم.</div><div id="fleetChecklistItems"></div><div class="cards"><div class="card"><div class="label">إنجاز اليوم</div><div class="stat" id="fleetChecklistProgress">0/6</div></div></div><button class="btn secondary" id="fleetChecklistReset">إعادة ضبط القائمة</button>';dash.appendChild(panel);
- function draw(){const box=document.getElementById('fleetChecklistItems');if(!box)return;box.innerHTML=items.map((x,i)=>'<label style="display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--border,#ddd);cursor:pointer"><input type="checkbox" data-check="'+i+'" '+(checked[i]?'checked':'')+'><span>'+x+'</span></label>').join('');box.querySelectorAll('input').forEach(c=>c.addEventListener('change',()=>{checked[c.dataset.check]=c.checked;localStorage.setItem(key,JSON.stringify(checked));progress();}));progress();}
- function progress(){const n=items.filter((_,i)=>checked[i]).length;const p=document.getElementById('fleetChecklistProgress');if(p)p.textContent=n+'/'+items.length;}
- document.getElementById('fleetChecklistReset').onclick=()=>{checked={};localStorage.removeItem(key);draw();};draw();
+ function draw(){const box=document.getElementById('fleetChecklistItems');if(!box)return;const checked=readChecked();box.innerHTML=items.map((x,i)=>'<label style="display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--border,#ddd);cursor:pointer"><input type="checkbox" data-check="'+i+'" '+(checked[i]?'checked':'')+'><span>'+x+'</span></label>').join('');box.querySelectorAll('input').forEach(c=>c.addEventListener('change',()=>{const next=readChecked();next[c.dataset.check]=c.checked;localStorage.setItem(key(),JSON.stringify(next));progress(next);}));progress(checked);}
+ function progress(checked=readChecked()){const n=items.filter((_,i)=>checked[i]).length;const p=document.getElementById('fleetChecklistProgress');if(p)p.textContent=n+'/'+items.length;}
+ document.getElementById('fleetChecklistReset').onclick=()=>{localStorage.removeItem(key());draw();};draw();window.asatuliRegisterScopeRefresher?.(draw);
 }catch(e){console.warn('Daily checklist module error',e)}})();
 </script>
 <script>
@@ -1093,13 +1396,15 @@ function closeMembers(){document.getElementById('membersModal').classList.remove
 (function(){try{
  if(document.getElementById('fleetHandoverLog'))return;
  const dash=document.getElementById('dash');if(!dash)return;
- const key='asatuli_handover_notes_v1';let notes=[];try{notes=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+ function key(){return fleetLocalStorageKey('asatuli_handover_notes_v1')}
+ function readNotes(){try{return JSON.parse(localStorage.getItem(key())||'[]')}catch(e){return[]}}
+ let notes=readNotes();
  const panel=document.createElement('section');panel.className='card section';panel.id='fleetHandoverLog';panel.innerHTML='<h2>📝 سجل الملاحظات وتسليم المناوبة</h2><div class="sub">سجّل الأعطال أو الملاحظات أو الأمور المطلوب متابعتها. محفوظ على هذا الجهاز.</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0"><select id="handoverType"><option>ملاحظة</option><option>عطل</option><option>حادث</option><option>متابعة</option><option>تسليم مناوبة</option></select><textarea id="handoverText" rows="3" placeholder="اكتب الملاحظة..." style="flex:1;min-width:180px"></textarea><button class="btn" id="handoverAdd">حفظ الملاحظة</button></div><div id="handoverList"></div><button class="btn secondary" id="handoverExport">تصدير السجل CSV</button>';dash.appendChild(panel);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- function draw(){const box=document.getElementById('handoverList');if(!box)return;box.innerHTML=notes.length?notes.map((n,i)=>'<div style="border:1px solid var(--border,#ddd);border-radius:10px;padding:10px;margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+esc(n.type)+'</strong><span class="sub">'+esc(n.time)+'</span><button class="btn secondary" data-del="'+i+'">حذف</button></div><div style="white-space:pre-wrap;margin-top:6px">'+esc(n.text)+'</div></div>').join(''):'<div class="sub">لا توجد ملاحظات مسجلة.</div>';box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{notes.splice(Number(b.dataset.del),1);save();draw();});}
- function save(){localStorage.setItem(key,JSON.stringify(notes));}
- document.getElementById('handoverAdd').onclick=()=>{const text=document.getElementById('handoverText').value.trim();if(!text){alert('اكتب الملاحظة أولاً');return;}notes.unshift({type:document.getElementById('handoverType').value,text,time:new Date().toLocaleString('ar')});save();document.getElementById('handoverText').value='';draw();};
- document.getElementById('handoverExport').onclick=()=>{const rows=[['النوع','الملاحظة','التاريخ'],...notes.map(n=>[n.type,n.text,n.time])];const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='asatuli-handover-log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};draw();
+ function draw(){notes=readNotes();const box=document.getElementById('handoverList');if(!box)return;box.innerHTML=notes.length?notes.map((n,i)=>'<div style="border:1px solid var(--border,#ddd);border-radius:10px;padding:10px;margin:8px 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><strong>'+esc(n.type)+'</strong><span class="sub">'+esc(n.time)+'</span><button class="btn secondary" data-del="'+i+'">حذف</button></div><div style="white-space:pre-wrap;margin-top:6px">'+esc(n.text)+'</div></div>').join(''):'<div class="sub">لا توجد ملاحظات مسجلة.</div>';box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{notes=readNotes();notes.splice(Number(b.dataset.del),1);save();draw();});}
+ function save(){localStorage.setItem(key(),JSON.stringify(notes));}
+ document.getElementById('handoverAdd').onclick=()=>{const text=document.getElementById('handoverText').value.trim();if(!text){alert('اكتب الملاحظة أولاً');return;}notes=readNotes();notes.unshift({type:document.getElementById('handoverType').value,text,time:new Date().toLocaleString('ar')});save();document.getElementById('handoverText').value='';draw();};
+ document.getElementById('handoverExport').onclick=()=>{const rows=[['النوع','الملاحظة','التاريخ'],...notes.map(n=>[n.type,n.text,n.time])];const csv='\ufeff'+rows.map(r=>r.map(v=>'"'+csvSafe(v).replace(/"/g,'""')+'"').join(',')).join('\n');const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='asatuli-handover-log.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};draw();window.asatuliRegisterScopeRefresher?.(draw);
 }catch(e){console.warn('Handover module error',e)}})();
 </script>
 <script>
