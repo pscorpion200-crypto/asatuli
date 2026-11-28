@@ -529,7 +529,7 @@ assert.ok(
   "Supplementary local records must use a user/company-scoped storage namespace",
 );
 const scopeStart = html.indexOf("function fleetLocalStorageScopePrefix(){");
-const scopeEnd = html.indexOf("\\nfunction fleetLocalStorageKey", scopeStart);
+const scopeEnd = html.indexOf("\nfunction fleetLocalStorageKey", scopeStart);
 assert.ok(scopeStart >= 0 && scopeEnd > scopeStart, "Local storage scope resolver is missing");
 const scopeResolverSource = html.slice(scopeStart, scopeEnd);
 const buildScopeResolver = new Function(
@@ -552,6 +552,19 @@ assert.ok(
     html.includes("تم إخفاؤه عن هذه الجلسة") &&
     html.includes("لم يتم حذفه أو نقله"),
   "Unassigned legacy records must remain preserved and exportable rather than being silently assigned to a new account",
+);
+assert.ok(
+  html.includes("local_scope:cloudMode?{company_id:companyId,user_id:cloudUserId}:null") &&
+    html.includes("function restoreScopedLocalExtras(parsed)") &&
+    html.includes("scope.company_id!==companyId||scope.user_id!==cloudUserId") &&
+    html.includes("fleetLocalSetItem('asatuli_inspections'") &&
+    html.includes("لم يتم تعديل سجلات التشغيل السحابية"),
+  "Scoped backups must restore supplementary records only into the exact matching account/company namespace",
+);
+assert.ok(
+  html.includes("restoreScopedLocalExtras(parsed)") &&
+    html.includes("window.asatuliRefreshScopedLocalData?.()"),
+  "Scoped local data restoration must refresh active local modules after successful restoration",
 );
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
