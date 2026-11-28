@@ -56,6 +56,10 @@ const unusedRpcRevocationMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127185742_revoke_unused_legacy_rpc_endpoints.sql"),
   "utf8",
 );
+const createCompanyRpcRevocationMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128043517_revoke_authenticated_create_company_rpc.sql"),
+  "utf8",
+);
 
 const blocks = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
 
@@ -593,6 +597,17 @@ for (const unusedRpc of [
     "Unused legacy RPC execution must remain revoked: " + unusedRpc,
   );
 }
+
+assert.ok(
+  createCompanyRpcRevocationMigration.includes(
+    "REVOKE ALL ON FUNCTION public.create_company(text) FROM PUBLIC, anon, authenticated",
+  ),
+  "Tenant creation RPC must not be directly executable by public or signed-in API roles",
+);
+assert.ok(
+  !html.includes("create_company"),
+  "The active client must not expose or call the retired tenant-creation RPC",
+);
 
 assert.ok(
   removedMemberAccessMigration.includes("JOIN public.members AS m"),
