@@ -266,13 +266,13 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
-const cloudLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
-const cloudLoaderEnd = html.indexOf("const oldSave", cloudLoaderStart);
-assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud loader must support table-scoped refresh");
-const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);
+const targetedLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
+const targetedLoaderEnd = html.indexOf("const oldSave", targetedLoaderStart);
+assert.ok(targetedLoaderStart >= 0 && targetedLoaderEnd > targetedLoaderStart, "Cloud loader must support table-scoped refresh");
+const targetedLoaderSource = html.slice(targetedLoaderStart, targetedLoaderEnd);
 assert.ok(
-  cloudLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
-    cloudLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
+  targetedLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
+    targetedLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
   "Cloud loader must refresh a validated selected table or all core tables",
 );
 const realtimeSyncStart = html.indexOf('<script id="asatuli-realtime-sync-v1">');
@@ -493,7 +493,7 @@ assert.ok(
 const cloudLoaderStart = html.indexOf("async function loadCloud(){");
 const cloudLoaderEnd = html.indexOf("const oldSave=save", cloudLoaderStart);
 assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud data loader is missing");
-const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);
+const targetedLoaderSource = html.slice(targetedLoaderStart, targetedLoaderEnd);
 assert.ok(
   cloudLoaderSource.includes(".order('id',{ascending:true})") &&
     cloudLoaderSource.includes(".range(from,from+pageSize-1)") &&
