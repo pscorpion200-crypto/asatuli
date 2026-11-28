@@ -59,6 +59,7 @@ Use two test users and, where possible, two test companies in the same browser p
 - Simulate a read failure on one core table during a full refresh. Confirm no subset of the old/new company arrays is committed.
 - Simulate a company switch failure and confirm the previous company ID, local storage scope, cached core data, page role, and realtime channel are restored.
 - Confirm switching between a manager and driver membership routes to the correct page for the selected company.
+- Switch between two driver memberships in different companies. Confirm the previous driver portal is removed and the new portal displays only the newly selected company's assigned vehicle.
 
 ## Backup and restore
 
