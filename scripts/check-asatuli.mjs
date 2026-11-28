@@ -490,10 +490,10 @@ assert.ok(
     html.includes("table==='trips'&&data.km<=0"),
   "Fleet record forms must reject invalid or negative operational numbers",
 );
-const cloudLoaderStart = html.indexOf("async function loadCloud(){");
+const cloudLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
 const cloudLoaderEnd = html.indexOf("const oldSave=save", cloudLoaderStart);
 assert.ok(cloudLoaderStart >= 0 && cloudLoaderEnd > cloudLoaderStart, "Cloud data loader is missing");
-const targetedLoaderSource = html.slice(targetedLoaderStart, targetedLoaderEnd);
+const cloudLoaderSource = html.slice(cloudLoaderStart, cloudLoaderEnd);
 assert.ok(
   cloudLoaderSource.includes(".order('id',{ascending:true})") &&
     cloudLoaderSource.includes(".range(from,from+pageSize-1)") &&
