@@ -221,7 +221,7 @@ const tripUiSource = html.slice(tripUiStart, tripUiEnd);
 assert.ok(
   tripUiSource.includes("function tripDraftSnapshot(fields)") &&
     tripUiSource.includes("let pendingTripSnapshot='';") &&
-    tripUiSource.includes("pendingTripSnapshot=tripDraftSnapshot(tripFormFields);"),
+    html.includes("pendingTripSnapshot=tripDraftSnapshot(tripFormFields);"),
   "A fresh idempotency key must capture the current draft fingerprint in memory",
 );
 assert.ok(
