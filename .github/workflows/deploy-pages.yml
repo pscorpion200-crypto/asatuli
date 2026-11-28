@@ -37,7 +37,8 @@ jobs:
 
   deploy:
     needs: validate
-    if: github.ref == 'refs/heads/main'
+    # Do not publish the frontend until its required production DB migration has been applied and verified.
+    if: github.ref == 'refs/heads/main' && vars.ASATULI_DRIVER_RECORD_IDEMPOTENCY_READY == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
