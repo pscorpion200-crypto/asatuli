@@ -520,7 +520,7 @@ assert.ok(
   "Data-quality checks must match vehicle columns and positive fuel/trip constraints",
 );
 assert.ok(
-  html.includes("fleetLocalStorageKey('asatuli_budget')") &&
+  html.includes("fleetLocalGetItem('asatuli_budget')") &&
     html.includes("fleetLocalStorageKey('asatuli_dispatch_check_'+dateKey())") &&
     html.includes("fleetLocalStorageKey('asatuli_daily_check_'+localDateKey())") &&
     html.includes("fleetLocalGetItem('asatuli_inspections')") &&
