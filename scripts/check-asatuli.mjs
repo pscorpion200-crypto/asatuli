@@ -542,6 +542,12 @@ assert.equal(
   "asatuli:scope:company-A:user-A:",
   "Cloud-mode local records must be isolated by both company and user",
 );
+assert.ok(
+  html.includes("fleetLocalSetItem('asatuli_incidents',JSON.stringify(records().filter(x=>x.id!==id)))") &&
+    html.includes("fleetLocalSetItem('asatuli_inspections',JSON.stringify(arr))") &&
+    html.includes("fleetLocalSetItem('asatuli_budget',String(val))"),
+  "Supplementary record edits and deletes must write only to the active scoped namespace",
+);
 assert.throws(
   () => buildScopeResolver(true, "company-A", null)(),
   /تعذر تحديد حساب وشركة/,
