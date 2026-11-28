@@ -581,10 +581,126 @@ assert.ok(
   "Scoped local data restoration must refresh active local modules after successful restoration",
 );
 assert.ok(
-  html.includes("if(parsed.local_scope)throw Error('هذه نسخة مرتبطة بحساب وشركة محددين.") &&
-    html.includes("restoreScopedLocalExtras(parsed)"),
-  "A cloud-scoped backup must not be restored into the unscoped local/demo namespace",
+  html.includes("function isAsatuliDeployPreview()") &&
+    html.includes("host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app')") &&
+    html.includes("function isAsatuliProductionApiUrl(url)") &&
+    html.includes("if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error(") &&
+    html.includes("savedProduction?'':(cfg.url||(preview?'':"),
+  "Netlify deploy previews must not default to or connect to the production Supabase project",
 );
+const previewHelpersStart = html.indexOf("function isAsatuliDeployPreview(){");
+const previewHelpersEnd = html.indexOf("function openConnect(){", previewHelpersStart);
+assert.ok(previewHelpersStart >= 0 && previewHelpersEnd > previewHelpersStart, "Preview safety helpers are missing");
+const previewHelpers = html.slice(previewHelpersStart, previewHelpersEnd);
+const buildPreviewHelpers = new Function("location", previewHelpers + "; return {isAsatuliDeployPreview,isAsatuliProductionApiUrl};");
+const netlifyPreview = buildPreviewHelpers({ hostname: "deploy-preview-14--asatuli.netlify.app" });
+assert.equal(netlifyPreview.isAsatuliDeployPreview(), true, "Netlify deploy preview hostname must be detected");
+assert.equal(netlifyPreview.isAsatuliProductionApiUrl("https://aicvzcxrakhzlcfosvsx.supabase.co"), true,
+  "Production Supabase URL must be identified");
+assert.equal(netlifyPreview.isAsatuliProductionApiUrl("https://test-branch.supabase.co"), false,
+  "A branch-specific Supabase URL must not be mistaken for production");
+assert.equal(buildPreviewHelpers({ hostname: "asatuli.netlify.app" }).isAsatuliDeployPreview(), false,
+  "The production Netlify hostname must not be treated as a deploy preview");
+
+const scopedRestoreStart = html.indexOf("function restoreScopedLocalExtras(parsed){");
+const scopedRestoreEnd = html.indexOf("\nfunction restoreJSON(event){", scopedRestoreStart);
+assert.ok(scopedRestoreStart >= 0 && scopedRestoreEnd > scopedRestoreStart, "Scoped local restore function is missing");
+const scopedRestoreSource = html.slice(scopedRestoreStart, scopedRestoreEnd);
+const scopedCompany = "company-test-A";
+const scopedUser = "user-test-A";
+const scopedPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
+const restoreData = new Map([
+  ["asatuli_inspections", JSON.stringify([{ id: "legacy-device-inspection" }])],
+  [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "old-scoped-inspection" }])],
+  [scopedPrefix + "asatuli_incidents", JSON.stringify([{ id: "old-scoped-incident" }])],
+  [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "old", text: "Old", done: false }] })],
+]);
+let refreshCount = 0;
+let successAlerts = 0;
+let restoreConfirm = true;
+const makeLocalStorageMock = (data, failKey = null) => {
+  let shouldFail = Boolean(failKey);
+  return {
+    get length() { return data.size; },
+    key(index) { return [...data.keys()][index] ?? null; },
+    getItem(key) { return data.has(key) ? data.get(key) : null; },
+    setItem(key, value) {
+      if (shouldFail && key === failKey) { shouldFail = false; throw new Error("simulated local storage quota failure"); }
+      data.set(key, String(value));
+    },
+    removeItem(key) { data.delete(key); },
+  };
+};
+const localStorageMock = makeLocalStorageMock(restoreData);
+const restoreStorageKey = (key) => scopedPrefix + key;
+const restoreSetItem = (key, value) => localStorageMock.setItem(restoreStorageKey(key), value);
+const restoreRemoveItem = (key) => localStorageMock.removeItem(restoreStorageKey(key));
+const restoreWindow = { asatuliRefreshScopedLocalData() { refreshCount += 1; } };
+const restoreFunctionFactory = new Function(
+  "companyId", "cloudUserId", "confirm", "localStorage", "fleetLocalStorageKey",
+  "fleetLocalSetItem", "fleetLocalRemoveItem", "window", "alert",
+  scopedRestoreSource + "; return restoreScopedLocalExtras;",
+);
+const restoreForUserA = restoreFunctionFactory(
+  scopedCompany, scopedUser, () => restoreConfirm, localStorageMock,
+  restoreStorageKey, restoreSetItem, restoreRemoveItem, restoreWindow,
+  () => { successAlerts += 1; },
+);
+const wrongOwnerBackup = {
+  local_scope: { company_id: scopedCompany, user_id: "user-test-B" },
+  extras: { asatuli_inspections: [{ id: "must-not-import" }] },
+};
+const beforeWrongOwnerRestore = new Map(restoreData);
+assert.throws(() => restoreForUserA(wrongOwnerBackup), /هذه النسخة ليست مرتبطة بالحساب/,
+  "A backup from a different user must be rejected");
+assert.deepEqual([...restoreData.entries()], [...beforeWrongOwnerRestore.entries()],
+  "A rejected cross-user backup must not change any local storage key");
+
+const validScopedBackup = {
+  local_scope: { company_id: scopedCompany, user_id: scopedUser },
+  extras: {
+    asatuli_inspections: [{ id: "new-inspection" }],
+    asatuli_incidents: [{ id: "new-incident" }],
+    handover: [{ type: "ملاحظة", text: "new handover" }],
+    dispatchDaily: {
+      "asatuli_dispatch_check_2026-11-28": JSON.stringify({ tasks: [{ id: "new", text: "New", done: true }] }),
+    },
+    budgets: { asatuli_budget: "125", asatuli_vehicle_budgets: "{\"vehicle-A\":75}" },
+  },
+};
+restoreForUserA(validScopedBackup);
+assert.equal(JSON.parse(restoreData.get(scopedPrefix + "asatuli_inspections"))[0].id, "new-inspection",
+  "Valid same-user/company restore must replace the scoped inspection data");
+assert.equal(JSON.parse(restoreData.get(scopedPrefix + "asatuli_incidents"))[0].id, "new-incident",
+  "Valid same-user/company restore must replace the scoped incident data");
+assert.equal(restoreData.get("asatuli_inspections"), JSON.stringify([{ id: "legacy-device-inspection" }]),
+  "Legacy unscoped data must remain untouched by scoped restore");
+assert.equal(restoreData.get(scopedPrefix + "asatuli_budget"), "125",
+  "Valid same-user/company restore must restore scoped budgets");
+assert.equal(refreshCount, 1, "Successful scoped restore must refresh current panels");
+assert.equal(successAlerts, 1, "Successful scoped restore must report completion");
+
+const rollbackData = new Map([
+  [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "pre-restore-inspection" }])],
+  [scopedPrefix + "asatuli_budget", "88"],
+  [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] })],
+]);
+const rollbackStorage = makeLocalStorageMock(rollbackData, scopedPrefix + "asatuli_budget");
+const rollbackFunction = restoreFunctionFactory(
+  scopedCompany, scopedUser, () => true, rollbackStorage,
+  restoreStorageKey,
+  (key, value) => rollbackStorage.setItem(restoreStorageKey(key), value),
+  (key) => rollbackStorage.removeItem(restoreStorageKey(key)),
+  { asatuliRefreshScopedLocalData() {} }, () => {},
+);
+assert.throws(() => rollbackFunction(validScopedBackup), /تمت إعادة البيانات المحلية السابقة/,
+  "A failed scoped restore must report that rollback was attempted");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_inspections"), JSON.stringify([{ id: "pre-restore-inspection" }]),
+  "Rollback must restore the prior inspection records");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_budget"), "88",
+  "Rollback must restore the prior budget");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_dispatch_check_2026-11-28"), JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] }),
+  "Rollback must restore the prior daily checklist");
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
 const moduleAccessScriptEnd = html.indexOf("</script>", moduleAccessScriptStart);
