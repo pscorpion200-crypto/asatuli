@@ -197,7 +197,8 @@ assert.ok(logoutStart >= 0 && logoutEnd > logoutStart, "Cloud logout function is
 const logoutSource = html.slice(logoutStart, logoutEnd);
 assert.ok(
   logoutSource.includes("if(!cloudMode&&!sb)") &&
-    logoutSource.includes("const {error}=await sb.auth.signOut();if(error)throw error;"),
+    logoutSource.includes("const {error}=await sb.auth.signOut();if(error)throw error;") &&
+    logoutSource.includes("window.startAsatuliRealtimeSync?.()"),
   "Cloud logout must be explicit and must not clear data when Supabase sign-out fails",
 );
 assert.ok(
