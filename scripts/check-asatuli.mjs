@@ -256,11 +256,13 @@ assert.notEqual(
   initialTripSnapshot,
   "Replacing an invoice attachment must be detectable as a changed draft",
 );
-const duplicateBranchStart = tripUiSource.indexOf("if(result.duplicate){");
-const duplicateEarlyReturn = tripUiSource.indexOf("return;", duplicateBranchStart);
-const duplicateFieldClear = tripUiSource.indexOf("['dpTripDest','dpTripKm'", duplicateBranchStart);
+const tripSaveHandlerStart = html.indexOf("document.getElementById('dpTripSave').onclick=async()=>");
+const duplicateBranchStart = html.indexOf("if(result.duplicate){", tripSaveHandlerStart);
+const duplicateEarlyReturn = html.indexOf("return;", duplicateBranchStart);
+const duplicateFieldClear = html.indexOf("['dpTripDest','dpTripKm'", duplicateBranchStart);
 assert.ok(
-  duplicateBranchStart >= 0 && duplicateEarlyReturn > duplicateBranchStart && duplicateEarlyReturn < duplicateFieldClear,
+  tripSaveHandlerStart >= 0 && duplicateBranchStart > tripSaveHandlerStart &&
+    duplicateEarlyReturn > duplicateBranchStart && duplicateEarlyReturn < duplicateFieldClear,
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
