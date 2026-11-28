@@ -700,7 +700,67 @@ assert.deepEqual(JSON.parse(restoreData.get(scopedPrefix + "asatuli_daily_check_
 assert.equal(restoreData.get(scopedPrefix + "asatuli_budget"), "125",
   "Valid same-user/company restore must restore scoped budgets");
 assert.equal(refreshCount, 1, "Successful scoped restore must refresh current panels");
+
 assert.equal(successAlerts, 1, "Successful scoped restore must report completion");
+
+// Execute the actual backup builder with isolated browser shims to verify daily
+// checklists are serialized under the correct account/company namespace.
+const backupStart = html.indexOf("function backupJSON(){");
+const backupEnd = html.indexOf("\\nfunction restoreScopedLocalExtras(", backupStart);
+assert.ok(backupStart >= 0 && backupEnd > backupStart, "Backup builder source is missing");
+const backupSource = html.slice(backupStart, backupEnd);
+const scopedBackupPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
+const backupEntries = new Map([
+  [scopedBackupPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: true, 3: false })],
+  [scopedBackupPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "dispatch", done: true }] })],
+]);
+const backupStorage = {
+  get length() { return backupEntries.size; },
+  key(index) { return [...backupEntries.keys()][index] ?? null; },
+};
+let capturedBackupBlob = null;
+let backupAnchorClicked = false;
+const backupURL = {
+  createObjectURL(blob) { capturedBackupBlob = blob; return "blob:asatuli-backup-test"; },
+  revokeObjectURL() {},
+};
+const backupDocument = {
+  createElement() { return { click() { backupAnchorClicked = true; } }; },
+};
+const backupKey = (key) => scopedBackupPrefix + key;
+const buildBackup = new Function(
+  "fleetLocalGetItem", "fleetLocalStorageKey", "localStorage", "cloudMode",
+  "companyId", "cloudUserId", "store", "Blob", "URL", "document", "setTimeout", "Date",
+  backupSource + "; return backupJSON;",
+)(
+  (key) => backupEntries.get(backupKey(key)) ?? null,
+  backupKey,
+  backupStorage,
+  true,
+  scopedCompany,
+  scopedUser,
+  { vehicles: [], drivers: [], fuel: [], maintenance: [], trips: [] },
+  Blob,
+  backupURL,
+  backupDocument,
+  () => 0,
+  Date,
+);
+buildBackup();
+assert.equal(backupAnchorClicked, true, "Cloud backup must trigger its download action");
+assert.ok(capturedBackupBlob, "Cloud backup must produce a JSON blob");
+const builtCloudBackup = JSON.parse(await capturedBackupBlob.text());
+assert.deepEqual(
+  JSON.parse(builtCloudBackup.extras.dailyChecklist["asatuli_daily_check_2026-11-28"]),
+  { 0: true, 3: false },
+  "Cloud backup must serialize the daily preparation checklist for the active scope",
+);
+assert.deepEqual(
+  builtCloudBackup.local_scope,
+  { company_id: scopedCompany, user_id: scopedUser },
+  "Cloud backup must retain its user/company binding",
+);
+
 
 const rollbackData = new Map([
   [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "pre-restore-inspection" }])],
