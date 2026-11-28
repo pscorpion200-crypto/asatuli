@@ -412,7 +412,7 @@ assert.ok(
   "Driver fuel entry must permit the database-supported zero price while requiring positive liters",
 );
 const idempotencyHelperStart = html.indexOf("async function saveDriverRecordIdempotently(");
-const idempotencyHelperEnd = html.indexOf("\\nfunction showDriverView(", idempotencyHelperStart);
+const idempotencyHelperEnd = html.indexOf("\nfunction showDriverView(", idempotencyHelperStart);
 assert.ok(idempotencyHelperStart >= 0 && idempotencyHelperEnd > idempotencyHelperStart, "Driver idempotency helper source is missing");
 const idempotencyHelperSource = html.slice(idempotencyHelperStart, idempotencyHelperEnd);
 const pendingStorage = new Map();
