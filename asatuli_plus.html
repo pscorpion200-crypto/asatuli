@@ -382,9 +382,18 @@ function asatuliRenderLegacyLocalDataNotice(){
  const panel=old||document.createElement('section');
  panel.id='asatuliLegacyLocalDataNotice';panel.className='card section';
  panel.style.borderColor='#e6bd70';
- panel.innerHTML='<h2>تنبيه خصوصية البيانات المحلية القديمة</h2><p class="sub">يوجد سجل قديم محفوظ على هذا الجهاز خارج حساب الشركة الحالي. تم إخفاؤه عن هذه الجلسة لحماية خصوصية الحسابات والشركات، ولم يتم حذفه أو نقله. لا تستورد هذه البيانات إلى الحساب الحالي إلا بعد التأكد من أنها تخصه.</p>';
+ panel.innerHTML='<h2>تنبيه خصوصية البيانات المحلية القديمة</h2><p class="sub">يوجد سجل قديم محفوظ على هذا الجهاز خارج حساب الشركة الحالي. تم إخفاؤه عن هذه الجلسة لحماية خصوصية الحسابات والشركات، ولم يتم حذفه أو نقله. لا تستورد هذه البيانات إلى الحساب الحالي إلا بعد التأكد من أنها تخصه.</p><button class="btn secondary" type="button" onclick="exportAsatuliLegacyLocalData()">تصدير السجل القديم للاحتفاظ به</button>';
  if(!old)dash.insertBefore(panel,dash.firstChild);
 }
+window.exportAsatuliLegacyLocalData=function(){
+ const extras={asatuli_inspections:[],asatuli_incidents:[],handover:[],budgets:{},dispatchDaily:{}};
+ for(const key of ['asatuli_inspections','asatuli_incidents','asatuli_handover_notes_v1']){try{const value=localStorage.getItem(key);if(value!==null)extras[key]=JSON.parse(value);}catch(error){console.warn('Legacy local data could not be parsed:',key,error);}}
+ for(const key of ['asatuli_budget','asatuli_vehicle_budgets','asatuli_category_vehicle_budgets']){const value=localStorage.getItem(key);if(value!==null)extras.budgets[key]=value;}
+ for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);if(key&&key.startsWith('asatuli_dispatch_check_'))extras.dispatchDaily[key]=localStorage.getItem(key);}
+ const payload={app:'أسطولي Plus',format:'legacy-device-local-data',version:1,created_at:new Date().toISOString(),warning:'هذه بيانات محلية قديمة لم يتم ربطها بحساب أو شركة. راجع ملكيتها قبل استيرادها.',extras};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='asatuli-legacy-local-data-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
 window.asatuliRefreshScopedLocalData=function(){
  for(const refresh of asatuliScopeRefreshers){try{refresh();}catch(error){console.warn('Scoped local data refresh failed',error);}}
  asatuliRenderLegacyLocalDataNotice();
@@ -745,12 +754,17 @@ async function saveDriverRecordIdempotently(table,formKey,payload){
  if(!globalThis.crypto||typeof globalThis.crypto.randomUUID!=='function')throw new Error('حدّث المتصفح حتى نتمكن من منع تكرار العملية.');
  const storageKey='asatuli:pending-driver-record:'+companyId+':'+vehicle.id+':'+uid+':'+table+':'+formKey;
  const snapshot=JSON.stringify(payload);
+ const pendingRaw=localStorage.getItem(storageKey);
  let pending=null;
- try{pending=JSON.parse(localStorage.getItem(storageKey)||'null');}catch(error){console.warn('Invalid pending driver operation cache',error);}
- if(pending&&typeof pending.id==='string'&&pending.snapshot!==snapshot){
-  throw new Error('هناك محاولة حفظ سابقة لم نتأكد من نتيجتها. أعد المحاولة بنفس البيانات أولاً قبل تعديلها، حتى لا يتكرر السجل.');
- }
- if(!pending||typeof pending.id!=='string'){
+ if(pendingRaw!==null){
+  try{pending=JSON.parse(pendingRaw);}catch(error){throw new Error('تعذر قراءة مفتاح حماية عملية سابقة. لا تعاود تسجيل العملية بقيم مختلفة؛ احتفظ بالبيانات واطلب مراجعة المسؤول.');}
+  if(!pending||typeof pending.id!=='string'||!pending.id||typeof pending.snapshot!=='string'){
+   throw new Error('بيانات محاولة الحفظ السابقة غير مكتملة. أوقفنا العملية لمنع إنشاء سجل مكرر.');
+  }
+  if(pending.snapshot!==snapshot){
+   throw new Error('هناك محاولة حفظ سابقة لم نتأكد من نتيجتها. أعد المحاولة بنفس البيانات أولاً قبل تعديلها، حتى لا يتكرر السجل.');
+  }
+ }else{
   pending={id:globalThis.crypto.randomUUID(),snapshot};
   localStorage.setItem(storageKey,JSON.stringify(pending));
  }
