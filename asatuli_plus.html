@@ -398,7 +398,22 @@ window.asatuliRefreshScopedLocalData=function(){
  for(const refresh of asatuliScopeRefreshers){try{refresh();}catch(error){console.warn('Scoped local data refresh failed',error);}}
  asatuliRenderLegacyLocalDataNotice();
 };
-function openConnect(){document.getElementById('connectModal').classList.add('open');let cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');document.getElementById('sbUrl').value=cfg.url||'https://aicvzcxrakhzlcfosvsx.supabase.co';document.getElementById('sbKey').value=cfg.key||'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS';document.getElementById('connectStatus').textContent=''}
+function isAsatuliDeployPreview(){
+ const host=String(location.hostname||'').toLowerCase();
+ return host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app');
+}
+function isAsatuliProductionApiUrl(url){
+ try{return new URL(url).hostname.toLowerCase()==='aicvzcxrakhzlcfosvsx.supabase.co';}catch{return false;}
+}
+function openConnect(){
+ document.getElementById('connectModal').classList.add('open');
+ let cfg={};try{cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}')}catch(error){console.warn('Saved Supabase configuration is invalid',error);}
+ const preview=isAsatuliDeployPreview();
+ const savedProduction=preview&&isAsatuliProductionApiUrl(cfg.url||'');
+ document.getElementById('sbUrl').value=savedProduction?'':(cfg.url||(preview?'':'https://aicvzcxrakhzlcfosvsx.supabase.co'));
+ document.getElementById('sbKey').value=savedProduction?'':(cfg.key||(preview?'':'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS'));
+ document.getElementById('connectStatus').textContent=preview?'بيئة معاينة آمنة: أدخل رابط ومفتاح Supabase لفرع الاختبار فقط. الاتصال بقاعدة الإنتاج محظور من هذه المعاينة.':'';
+}
 function closeConnect(){if(document.body.classList.contains('auth-gate'))return;document.getElementById('connectModal').classList.remove('open')}
 async function connectAndAuth(mode){
  const status=document.getElementById('connectStatus');
@@ -413,6 +428,7 @@ async function connectAndAuth(mode){
   const password=document.getElementById('authPass').value;
   const email=identifier.includes('@')?identifier:('driver-'+identifier.replace(/\D/g,'')+'@asatuli.local');
   if(!url||!key||!identifier||!password)throw Error('أدخل اسم المستخدم أو البريد وكلمة المرور.');
+  if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error('ممنوع الاتصال بقاعدة الإنتاج من نسخة المعاينة. أدخل رابط ومفتاح فرع Supabase التجريبي.');
   localStorage.setItem('asatuli_sb_cfg',JSON.stringify({url,key}));
   sb=window.supabase.createClient(url,key);
   const {data:loginData,error:loginError}=await sb.auth.signInWithPassword({email,password});
