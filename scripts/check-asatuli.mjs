@@ -32,7 +32,7 @@ const tripSubmissionIdempotencyMigration = readFileSync(
   "utf8",
 );
 const fleetOptimisticLockMigration = readFileSync(
-  resolve(root, "supabase/migrations/20261128041600_fleet_record_optimistic_locking.sql"),
+  resolve(root, "supabase/migrations/20261128042012_fleet_record_optimistic_locking.sql"),
   "utf8",
 );
 const driverApprovalRepair = readFileSync(
