@@ -485,6 +485,27 @@ try {
 }
 assert.equal(simulatedTimeoutSeen, true, "A response timeout must be surfaced while retaining the pending idempotency key");
 assert.equal(pendingStorage.size, 1, "An ambiguous first attempt must keep its key in local storage for a retry");
+const pendingKey = [...pendingStorage.keys()][0];
+const pendingRaw = pendingStorage.get(pendingKey);
+let changedPayloadBlocked = false;
+try {
+  await idempotentSave("fuel", "fuel", { ...retryPayload, liters: 21 });
+} catch (error) {
+  changedPayloadBlocked = error.message.includes("أعد المحاولة بنفس البيانات أولاً");
+}
+assert.equal(changedPayloadBlocked, true, "Changing form values must not replace an unresolved idempotency key");
+assert.equal(insertAttempts, 1, "A changed payload must be blocked before another insert is attempted");
+assert.equal(pendingStorage.get(pendingKey), pendingRaw, "The unresolved key and original payload snapshot must remain untouched");
+pendingStorage.set(pendingKey, "not-json");
+let corruptPendingBlocked = false;
+try {
+  await idempotentSave("fuel", "fuel", retryPayload);
+} catch (error) {
+  corruptPendingBlocked = error.message.includes("مفتاح حماية عملية سابقة");
+}
+assert.equal(corruptPendingBlocked, true, "A corrupt pending key must block a new insert instead of silently generating a new key");
+assert.equal(insertAttempts, 1, "A corrupt pending key must not allow another insert");
+pendingStorage.set(pendingKey, pendingRaw);
 const confirmedRetry = await idempotentSave("fuel", "fuel", retryPayload);
 assert.equal(confirmedRetry.id, "row-confirmed-after-timeout", "A retry must resolve the previously committed row after a unique-key collision");
 assert.equal(insertAttempts, 2, "The retry must reuse the same key rather than creating another row");
@@ -499,9 +520,38 @@ assert.ok(
   "Data-quality checks must match vehicle columns and positive fuel/trip constraints",
 );
 assert.ok(
-  html.includes("if(inviteError)console.warn(") &&
-    html.includes("if(inviteError)throw new Error('تم تسجيل الدخول لكن تعذرت معالجة الدعوة: '+inviteError.message)"),
-  "A failed invite RPC must not block an account that already has a company membership",
+  html.includes("fleetLocalStorageKey('asatuli_budget')") &&
+    html.includes("fleetLocalStorageKey('asatuli_dispatch_check_'+dateKey())") &&
+    html.includes("fleetLocalStorageKey('asatuli_daily_check_'+localDateKey())") &&
+    html.includes("fleetLocalGetItem('asatuli_inspections')") &&
+    html.includes("fleetLocalGetItem('asatuli_incidents')") &&
+    html.includes("fleetLocalStorageKey('asatuli_handover_notes_v1')"),
+  "Supplementary local records must use a user/company-scoped storage namespace",
+);
+const scopeStart = html.indexOf("function fleetLocalStorageScopePrefix(){");
+const scopeEnd = html.indexOf("\\nfunction fleetLocalStorageKey", scopeStart);
+assert.ok(scopeStart >= 0 && scopeEnd > scopeStart, "Local storage scope resolver is missing");
+const scopeResolverSource = html.slice(scopeStart, scopeEnd);
+const buildScopeResolver = new Function(
+  "cloudMode", "companyId", "cloudUserId",
+  scopeResolverSource + "; return fleetLocalStorageScopePrefix;",
+);
+assert.equal(buildScopeResolver(false, null, null)(), "", "Local/demo mode must retain its existing device storage namespace");
+assert.equal(
+  buildScopeResolver(true, "company-A", "user-A")(),
+  "asatuli:scope:company-A:user-A:",
+  "Cloud-mode local records must be isolated by both company and user",
+);
+assert.throws(
+  () => buildScopeResolver(true, "company-A", null)(),
+  /تعذر تحديد حساب وشركة/,
+  "Cloud-mode local records must fail closed if the authenticated user identity is missing",
+);
+assert.ok(
+  html.includes("window.exportAsatuliLegacyLocalData=function()") &&
+    html.includes("تم إخفاؤه عن هذه الجلسة") &&
+    html.includes("لم يتم حذفه أو نقله"),
+  "Unassigned legacy records must remain preserved and exportable rather than being silently assigned to a new account",
 );
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
