@@ -266,22 +266,22 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
-const targetedLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
-const targetedLoaderEnd = html.indexOf("const oldSave", targetedLoaderStart);
-assert.ok(targetedLoaderStart >= 0 && targetedLoaderEnd > targetedLoaderStart, "Cloud loader must support table-scoped refresh");
-const targetedLoaderSource = html.slice(targetedLoaderStart, targetedLoaderEnd);
+const realtimeOptLoaderStart = html.indexOf("async function loadCloud(targetTable=null)");
+const realtimeOptLoaderEnd = html.indexOf("const oldSave", realtimeOptLoaderStart);
+assert.ok(realtimeOptLoaderStart >= 0 && realtimeOptLoaderEnd > realtimeOptLoaderStart, "Cloud loader must support table-scoped refresh");
+const realtimeOptLoaderSource = html.slice(realtimeOptLoaderStart, realtimeOptLoaderEnd);
 assert.ok(
-  targetedLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
-    targetedLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
+  realtimeOptLoaderSource.includes("const selected=targetTable?[targetTable]:Object.keys(tables)") &&
+    realtimeOptLoaderSource.includes("selected.some(k=>!Object.prototype.hasOwnProperty.call(tables,k))"),
   "Cloud loader must refresh a validated selected table or all core tables",
 );
-const realtimeSyncStart = html.indexOf('<script id="asatuli-realtime-sync-v1">');
-const realtimeSyncEnd = html.indexOf("</script>", realtimeSyncStart);
-assert.ok(realtimeSyncStart >= 0 && realtimeSyncEnd > realtimeSyncStart, "Realtime sync handler is missing");
-const realtimeSyncSource = html.slice(realtimeSyncStart, realtimeSyncEnd);
+const realtimeOptSyncStart = html.indexOf('<script id="asatuli-realtime-sync-v1">');
+const realtimeOptSyncEnd = html.indexOf("</script>", realtimeOptSyncStart);
+assert.ok(realtimeOptSyncStart >= 0 && realtimeOptSyncEnd > realtimeOptSyncStart, "Realtime sync handler is missing");
+const realtimeOptSyncSource = html.slice(realtimeOptSyncStart, realtimeOptSyncEnd);
 assert.ok(
-  realtimeSyncSource.includes("coreTables.has(table)?table:null") &&
-    realtimeSyncSource.includes("loadCloud(targetTable)"),
+  realtimeOptSyncSource.includes("coreTables.has(table)?table:null") &&
+    realtimeOptSyncSource.includes("loadCloud(targetTable)"),
   "Realtime changes to core fleet tables should reload only the affected table",
 );
 
