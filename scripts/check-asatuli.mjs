@@ -266,6 +266,21 @@ assert.ok(
   "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
 );
 
+const reportExportStart = html.indexOf("function exportReport(){");
+const reportExportEnd = html.indexOf("function exportDriverReportCSV()", reportExportStart);
+assert.ok(reportExportStart >= 0 && reportExportEnd > reportExportStart, "Report export function is missing");
+const reportExportSource = html.slice(reportExportStart, reportExportEnd);
+assert.ok(
+  reportExportSource.includes(".join('\\n')") &&
+    reportExportSource.includes("تقرير\\nالفترة:") &&
+    !reportExportSource.includes("\\\\n"),
+  "Text report export must contain real newline escapes, not literal backslash-n sequences",
+);
+assert.ok(
+  html.includes("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"),
+  "Browser Supabase SDK must use an explicitly pinned release",
+);
+
 const invoiceReview = html.match(
   /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
 )?.[1] ?? "";

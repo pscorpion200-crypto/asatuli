@@ -355,7 +355,7 @@ const store={vehicles:[],drivers:[],fuel:[],maintenance:[],trips:[]};let current
  const baseRender=render;render=function(){baseRender();filterRows();};
 })();
 
-</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.2"></script>
 <script>
 let sb=null, companyId=null, cloudMode=false;
 function openConnect(){document.getElementById('connectModal').classList.add('open');let cfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');document.getElementById('sbUrl').value=cfg.url||'https://aicvzcxrakhzlcfosvsx.supabase.co';document.getElementById('sbKey').value=cfg.key||'sb_publishable_MsCUn9BHMRAjw6IIEf9efQ_QBicfmWS';document.getElementById('connectStatus').textContent=''}
@@ -445,7 +445,7 @@ function exportFleetVehicleSummaryCSV(){const rows=[['المركبة','الحا�
  const period=document.getElementById('reportMonth')?.value||'كل الفترة',vehicle=document.getElementById('reportVehicle')?.selectedOptions?.[0]?.text||'كل المركبات',byDriver={};
  trips.forEach(x=>{const id=x.driver_id||'unknown';if(!byDriver[id])byDriver[id]={name:dname(id),trips:0,km:0,loaded:0,rev:0,other:0};byDriver[id].trips++;byDriver[id].km+=Number(x.km||0);byDriver[id].loaded+=Number(x.loaded_meters||0);byDriver[id].rev+=Number(x.revenue||0);byDriver[id].other+=Number(x.other_cost||0)});
  const driverText=Object.values(byDriver).sort((a,b)=>b.rev-a.rev).map(d=>`${escHTML(d.name)}: ${d.trips} رحلة | ${d.km} كم | ${d.loaded.toLocaleString('ar')} متر محمّل | الإيراد ${money(d.rev)} | مصروف ${money(d.other)} | صافي ${money(d.rev-d.other)}`).join('\n')||'لا توجد رحلات';
- const txt=`أسطولي Plus — تقرير\\nالفترة: ${period}\\nالمركبة: ${vehicle}\\nعدد الرحلات: ${trips.length}\\nالمسافة: ${km} كم\\nالأمتار المحملة: ${loadedMeters.toLocaleString('ar')} متر\\nالإيرادات: ${money(rev)} دينار\\nالوقود: ${money(fuel)} دينار\\nالصيانة: ${money(mnt)} دينار\\nمصاريف أخرى: ${money(other)} دينار\\nإجمالي المصروف: ${money(fuel+mnt+other)} دينار\\nصافي الفرق: ${money(rev-fuel-mnt-other)} دينار\\n\\nأداء السائقين\\n${driverText}`;
+ const txt=`أسطولي Plus — تقرير\nالفترة: ${period}\nالمركبة: ${vehicle}\nعدد الرحلات: ${trips.length}\nالمسافة: ${km} كم\nالأمتار المحملة: ${loadedMeters.toLocaleString('ar')} متر\nالإيرادات: ${money(rev)} دينار\nالوقود: ${money(fuel)} دينار\nالصيانة: ${money(mnt)} دينار\nمصاريف أخرى: ${money(other)} دينار\nإجمالي المصروف: ${money(fuel+mnt+other)} دينار\nصافي الفرق: ${money(rev-fuel-mnt-other)} دينار\n\nأداء السائقين\n${driverText}`;
  const blob=new Blob([txt],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='asatuli-report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 
