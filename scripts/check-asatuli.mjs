@@ -401,6 +401,14 @@ assert.ok(
     html.includes("localStorage.removeItem(storageKey)"),
   "Driver operational writes must reuse a pending idempotency key after ambiguous network outcomes",
 );
+assert.ok(
+  html.includes("function isAsatuliDeployPreview()") &&
+    html.includes("host.startsWith('deploy-preview-')&&host.endsWith('.netlify.app')") &&
+    html.includes("function isAsatuliProductionApiUrl(url)") &&
+    html.includes("if(isAsatuliDeployPreview()&&isAsatuliProductionApiUrl(url))throw Error(") &&
+    html.includes("savedProduction?'':(cfg.url||(preview?'':"),
+  "Netlify deploy previews must not default to or connect to the production Supabase project",
+);
 for (const handler of ["dpFuelSave", "dpMaintSave", "dpOilSave"]) {
   const handlerStart = html.indexOf("document.getElementById('" + handler + "').onclick=async()=>");
   assert.ok(handlerStart >= 0 && html.indexOf("button.disabled=true;", handlerStart) > handlerStart,
