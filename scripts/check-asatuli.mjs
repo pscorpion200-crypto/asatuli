@@ -706,7 +706,7 @@ assert.equal(successAlerts, 1, "Successful scoped restore must report completion
 // Execute the actual backup builder with isolated browser shims to verify daily
 // checklists are serialized under the correct account/company namespace.
 const backupStart = html.indexOf("function backupJSON(){");
-const backupEnd = html.indexOf("\\nfunction restoreScopedLocalExtras(", backupStart);
+const backupEnd = html.indexOf("\nfunction restoreScopedLocalExtras(", backupStart);
 assert.ok(backupStart >= 0 && backupEnd > backupStart, "Backup builder source is missing");
 const backupSource = html.slice(backupStart, backupEnd);
 const scopedBackupPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
