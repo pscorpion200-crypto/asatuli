@@ -267,7 +267,7 @@ assert.ok(
 );
 
 assert.equal(
-  (html.match(/cdn\\.jsdelivr\\.net\\/npm\\\/@supabase\\/supabase-js@/g) || []).length,
+  html.split("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@").length - 1,
   1,
   "The Supabase browser SDK must be loaded from one pinned CDN artifact",
 );
