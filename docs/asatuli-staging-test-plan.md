@@ -14,7 +14,7 @@ Before applying or testing `20261128082200_driver_operational_submission_idempot
 
 1. Confirm the development branch is isolated and contains no copied production data.
 2. Confirm all 12 production public tables and their columns, indexes, foreign keys, triggers, RLS policies, and required functions are present.
-3. Compare the branch schema with the approved production schema snapshot. The repository currently has 18 migration files while the production migration ledger contains 65 entries; do not assume the repository alone can rebuild the schema from zero.
+3. Compare the branch schema with the approved production schema snapshot. The repository currently has 20 migration files while the production migration ledger contains 65 entries; do not assume the repository alone can rebuild the schema from zero.
 4. Confirm `fuel` and `maintenance` have RLS enabled, and the branch policies preserve the existing assigned-vehicle or module-permission authorization rules.
 5. Apply the new migration only on the disposable branch, then verify both `submission_id` columns and the two partial unique indexes exist.
 
