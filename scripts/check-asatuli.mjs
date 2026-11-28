@@ -528,6 +528,14 @@ assert.ok(
   "Data-quality checks must match vehicle columns and positive fuel/trip constraints",
 );
 assert.ok(
+  html.includes("extras.dailyChecklist[key]=localStorage.getItem(key)") &&
+    html.includes("extras.dailyChecklist['asatuli_daily_check_'+k.slice(dailyPrefix.length)]") &&
+    html.includes("for(const [key,value] of Object.entries(ex.dailyChecklist||{}))") &&
+    html.includes("for(const [k,v] of Object.entries(ex.dailyChecklist||{}))") &&
+    html.includes("key.startsWith(fleetLocalStorageKey('asatuli_daily_check_'))"),
+  "Daily preparation checklists must survive legacy export, scoped backup/restore, local/demo restore, and rollback",
+);
+assert.ok(
   html.includes("fleetLocalGetItem('asatuli_budget')") &&
     html.includes("fleetLocalStorageKey('asatuli_dispatch_check_'+dateKey())") &&
     html.includes("fleetLocalStorageKey('asatuli_daily_check_'+localDateKey())") &&
@@ -611,6 +619,7 @@ const scopedUser = "user-test-A";
 const scopedPrefix = "asatuli:scope:" + scopedCompany + ":" + scopedUser + ":";
 const restoreData = new Map([
   ["asatuli_inspections", JSON.stringify([{ id: "legacy-device-inspection" }])],
+  [scopedPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: true, 1: false })],
   [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "old-scoped-inspection" }])],
   [scopedPrefix + "asatuli_incidents", JSON.stringify([{ id: "old-scoped-incident" }])],
   [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "old", text: "Old", done: false }] })],
@@ -665,6 +674,9 @@ const validScopedBackup = {
     dispatchDaily: {
       "asatuli_dispatch_check_2026-11-28": JSON.stringify({ tasks: [{ id: "new", text: "New", done: true }] }),
     },
+    dailyChecklist: {
+      "asatuli_daily_check_2026-11-28": JSON.stringify({ 0: true, 2: true }),
+    },
     budgets: { asatuli_budget: "125", asatuli_vehicle_budgets: "{\"vehicle-A\":75}" },
   },
 };
@@ -675,6 +687,8 @@ assert.equal(JSON.parse(restoreData.get(scopedPrefix + "asatuli_incidents"))[0].
   "Valid same-user/company restore must replace the scoped incident data");
 assert.equal(restoreData.get("asatuli_inspections"), JSON.stringify([{ id: "legacy-device-inspection" }]),
   "Legacy unscoped data must remain untouched by scoped restore");
+assert.deepEqual(JSON.parse(restoreData.get(scopedPrefix + "asatuli_daily_check_2026-11-28")), { 0: true, 2: true },
+  "Valid same-user/company restore must restore the daily preparation checklist");
 assert.equal(restoreData.get(scopedPrefix + "asatuli_budget"), "125",
   "Valid same-user/company restore must restore scoped budgets");
 assert.equal(refreshCount, 1, "Successful scoped restore must refresh current panels");
@@ -684,6 +698,7 @@ const rollbackData = new Map([
   [scopedPrefix + "asatuli_inspections", JSON.stringify([{ id: "pre-restore-inspection" }])],
   [scopedPrefix + "asatuli_budget", "88"],
   [scopedPrefix + "asatuli_dispatch_check_2026-11-28", JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] })],
+  [scopedPrefix + "asatuli_daily_check_2026-11-28", JSON.stringify({ 0: false, 4: true })],
 ]);
 const rollbackStorage = makeLocalStorageMock(rollbackData, scopedPrefix + "asatuli_budget");
 const rollbackFunction = restoreFunctionFactory(
@@ -700,7 +715,9 @@ assert.equal(rollbackData.get(scopedPrefix + "asatuli_inspections"), JSON.string
 assert.equal(rollbackData.get(scopedPrefix + "asatuli_budget"), "88",
   "Rollback must restore the prior budget");
 assert.equal(rollbackData.get(scopedPrefix + "asatuli_dispatch_check_2026-11-28"), JSON.stringify({ tasks: [{ id: "pre", text: "Preserve me", done: true }] }),
-  "Rollback must restore the prior daily checklist");
+  "Rollback must restore the prior dispatch checklist");
+assert.equal(rollbackData.get(scopedPrefix + "asatuli_daily_check_2026-11-28"), JSON.stringify({ 0: false, 4: true }),
+  "Rollback must restore the prior daily preparation checklist");
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
 const moduleAccessScriptEnd = html.indexOf("</script>", moduleAccessScriptStart);
