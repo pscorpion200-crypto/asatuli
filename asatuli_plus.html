@@ -1281,7 +1281,7 @@ body.asatuli-driver-mode #asatuliDriverPortal .dp-logout{margin-top:8px!importan
   badge.textContent=label;badge.dataset.state=state;
  }
  const coreTables=new Set(['vehicles','drivers','fuel','maintenance','trips']);
- let queuedCoreTables=new Set(),refreshing=false,refreshQueued=false;
+ let queuedCoreTables=new Set(),refreshQueued=false;
  async function refreshFromDatabase(targetTable=null){
   if(!sb||!cloudMode||!companyId)return;
   if(refreshing){if(targetTable)queuedCoreTables.add(targetTable);else refreshQueued=true;return;}
