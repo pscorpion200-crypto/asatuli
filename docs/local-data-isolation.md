@@ -8,7 +8,9 @@ The browser-only operational supplements are isolated by both authenticated Supa
 - incidents and incident summaries
 - shift handover notes
 - global, per-vehicle, and per-category budgets
-- daily and dispatch checklists
+- daily preparation and dispatch checklists
+
+Daily preparation checklists (`asatuli_daily_check_*`) and dispatch checklists (`asatuli_dispatch_check_*`) are included in legacy export and same-scope backup/restore, alongside inspections, incidents, handover notes, and budgets.
 
 The localStorage namespace is:
 
