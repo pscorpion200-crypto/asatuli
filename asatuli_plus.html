@@ -603,12 +603,76 @@ function vehicleHistory(id){const v=store.vehicles.find(x=>x.id===id);if(!v)retu
 <script>
 // لوحة إنشاء حسابات السائقين (Edge Function آمنة)
 (function(){
- const nav=document.querySelector('.sidebar'); if(!nav||document.getElementById('createDriverNav'))return;
- const b=document.createElement('button');b.id='createDriverNav';b.className='nav button';b.style.cssText='margin-top:8px;color:#fff';b.innerHTML='👤 <span class="txt">إنشاء حساب سائق</span>';b.onclick=openCreateDriver;nav.appendChild(b);
+ const sidebar=document.querySelector('.sidebar');
+ if(!sidebar||document.getElementById('createDriverNav'))return;
+ // Keep the action inside the horizontal mobile navigation; sidebar action buttons are hidden on small screens.
+ const nav=sidebar.querySelector('.nav')||sidebar;
+ const b=document.createElement('button');
+ b.id='createDriverNav';
+ b.type='button';
+ b.className='nav button';
+ b.setAttribute('aria-label','إنشاء حساب سائق');
+ b.style.cssText='margin-top:8px;color:#fff';
+ b.innerHTML='👤 <span class="txt">إنشاء حساب سائق</span>';
+ // Resolve the handler at click time because it is defined immediately below.
+ b.onclick=()=>window.openCreateDriver();
+ nav.appendChild(b);
 })();
-window.openCreateDriver=function(){if(!sb||!cloudMode||!companyId){alert('سجّل الدخول للسحابة أولاً');return;}const sel=document.getElementById('newDriverVehicle');sel.innerHTML=(store.vehicles||[]).map(v=>`<option value="${escHTML(v.id)}">${escHTML(v.plate||'')} — ${escHTML(v.type||'')}</option>`).join('');if(!sel.options.length){alert('أضف مركبة أولاً');return;}document.getElementById('newDriverStatus').textContent='';document.getElementById('createDriverModal').classList.add('open');};
+window.openCreateDriver=function(){
+ if(!sb||!cloudMode||!companyId){alert('سجّل الدخول للسحابة أولاً');return;}
+ const sel=document.getElementById('newDriverVehicle');
+ sel.innerHTML=(store.vehicles||[]).map(v=>'<option value="'+escHTML(v.id)+'">'+escHTML(v.plate||'')+' — '+escHTML(v.type||'')+'</option>').join('');
+ if(!sel.options.length){alert('أضف مركبة أولاً');return;}
+ document.getElementById('newDriverStatus').textContent='';
+ document.getElementById('createDriverModal').classList.add('open');
+};
 window.closeCreateDriver=function(){document.getElementById('createDriverModal').classList.remove('open');};
-window.createDriverAccount=async function(){const status=document.getElementById('newDriverStatus');status.textContent='جار إنشاء الحساب...';try{const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('جلسة المدير غير موجودة');const phone=document.getElementById('newDriverPhone').value.trim();const payload={full_name:document.getElementById('newDriverName').value.trim(),phone,email:'driver-'+phone.replace(/\D/g,'')+'@asatuli.local',password:document.getElementById('newDriverPassword').value,vehicle_id:document.getElementById('newDriverVehicle').value,company_id:companyId};if(!payload.full_name||!payload.phone||!payload.password||payload.password.length<8||!payload.vehicle_id)throw new Error('أكمل الاسم ورقم الهاتف وكلمة المرور والسيارة');const url=(document.getElementById('sbUrl').value.trim()||'https://aicvzcxrakhzlcfosvsx.supabase.co').replace(/\/$/,'');const savedCfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');const key=document.getElementById('sbKey').value.trim()||savedCfg.key||'';if(!key)throw new Error('مفتاح اتصال Supabase غير محفوظ؛ أعد الاتصال بالسحابة أولاً.');const response=await fetch(url+'/functions/v1/owner-create-driver',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':key},body:JSON.stringify(payload)});const result=await response.json();if(!response.ok||result.error)throw new Error(result.error||'فشل إنشاء الحساب');status.textContent='تم إنشاء الحساب وتخصيص السيارة. احفظ بيانات الدخول للسائق.';alert('تم إنشاء حساب السائق بنجاح');['newDriverName','newDriverPhone','newDriverPassword'].forEach(id=>document.getElementById(id).value='');}catch(e){status.textContent='تعذر إنشاء الحساب: '+(e.message||e);}};
+window.createDriverAccount=async function(){
+ const status=document.getElementById('newDriverStatus');
+ const submit=document.querySelector('#createDriverModal .actions .btn');
+ if(submit?.disabled)return;
+ const originalLabel=submit?.textContent||'إنشاء الحساب';
+ if(submit){submit.disabled=true;submit.textContent='جار إنشاء الحساب...';}
+ status.textContent='جار إنشاء الحساب...';
+ try{
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw new Error('جلسة المدير غير موجودة');
+  const phone=document.getElementById('newDriverPhone').value.trim();
+  const password=document.getElementById('newDriverPassword').value;
+  const payload={
+   full_name:document.getElementById('newDriverName').value.trim(),
+   phone,
+   email:'driver-'+phone.replace(/\D/g,'')+'@asatuli.local',
+   password,
+   vehicle_id:document.getElementById('newDriverVehicle').value,
+   company_id:companyId
+  };
+  if(!payload.full_name||!payload.phone||!password||password.length<8||!payload.vehicle_id)throw new Error('أكمل الاسم ورقم الهاتف وكلمة المرور (8 أحرف على الأقل) والسيارة');
+  const url=(document.getElementById('sbUrl').value.trim()||'https://aicvzcxrakhzlcfosvsx.supabase.co').replace(/\/$/,'');
+  const savedCfg=JSON.parse(localStorage.getItem('asatuli_sb_cfg')||'{}');
+  const key=document.getElementById('sbKey').value.trim()||savedCfg.key||'';
+  if(!key)throw new Error('مفتاح اتصال Supabase غير محفوظ؛ أعد الاتصال بالسحابة أولاً.');
+  const response=await fetch(url+'/functions/v1/owner-create-driver',{
+   method:'POST',
+   headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':key},
+   body:JSON.stringify(payload)
+  });
+  let result={};
+  try{result=await response.json();}catch{throw new Error('استجابة الخادم غير مفهومة؛ تحقق من حالة الحساب قبل إعادة المحاولة.');}
+  if(!response.ok||!result.ok)throw new Error(result.error||'فشل إنشاء الحساب');
+  let refreshWarning='';
+  try{await loadCloud('drivers');render();}
+  catch(refreshError){refreshWarning=' تم إنشاء الحساب، لكن تعذر تحديث قائمة السائقين تلقائياً؛ حدّث الصفحة.';}
+  status.textContent='تم إنشاء الحساب وتخصيص السيارة. اسم المستخدم للسائق هو رقم الهاتف: '+phone+'. كلمة المرور هي التي أدخلتها.'+refreshWarning;
+  document.getElementById('newDriverPassword').value='';
+  if(typeof showFleetToast==='function')showFleetToast('تم إنشاء حساب السائق بنجاح');
+  else alert('تم إنشاء حساب السائق بنجاح');
+ }catch(e){
+  status.textContent='تعذر إنشاء الحساب: '+(e.message||e);
+ }finally{
+  if(submit){submit.disabled=false;submit.textContent=originalLabel;}
+ }
+};
 </script>
 
 
