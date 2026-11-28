@@ -10,7 +10,7 @@
 
 ## Database branch readiness gate
 
-Before applying or testing `20261128082200_driver_operational_submission_idempotency.sql`:
+Before applying or testing `20261128082200_driver_operational_submission_idempotency.sql` and `20261128120000_require_driver_role_for_assigned_vehicle_access.sql`:
 
 1. Confirm the development branch is isolated and contains no copied production data.
 2. Confirm all 12 production public tables and their columns, indexes, foreign keys, triggers, RLS policies, and required functions are present.
