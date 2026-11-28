@@ -31,6 +31,10 @@ const tripSubmissionIdempotencyMigration = readFileSync(
   resolve(root, "supabase/migrations/20261127223849_trip_submission_idempotency.sql"),
   "utf8",
 );
+const fleetOptimisticLockMigration = readFileSync(
+  resolve(root, "supabase/migrations/20261128041600_fleet_record_optimistic_locking.sql"),
+  "utf8",
+);
 const driverApprovalRepair = readFileSync(
   resolve(root, "supabase/operations/driver_portal_access_repair.sql"),
   "utf8",
@@ -364,6 +368,31 @@ assert.ok(
     tripSubmissionIdempotencyMigration.includes("CREATE UNIQUE INDEX IF NOT EXISTS trips_company_driver_submission_unique") &&
     tripSubmissionIdempotencyMigration.includes("WHERE submission_id IS NOT NULL"),
   "Trip submission ids must have a nullable, company/driver-scoped unique index",
+);
+
+const optimisticTables = ["vehicles", "drivers", "fuel", "maintenance", "trips"];
+assert.ok(
+  (fleetOptimisticLockMigration.match(/ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT clock_timestamp\(\)/g) || []).length === optimisticTables.length &&
+    optimisticTables.every((table) => fleetOptimisticLockMigration.includes(`public.${table}`)) &&
+    fleetOptimisticLockMigration.includes("BEFORE UPDATE ON public.%I") &&
+    fleetOptimisticLockMigration.includes("NEW.updated_at := clock_timestamp()"),
+  "All core fleet tables must receive a non-null version timestamp maintained automatically on update",
+);
+assert.ok(
+  html.includes("editingUpdatedAt=record?.updated_at??null") &&
+    html.includes(".eq('updated_at',expectedUpdatedAt)") &&
+    html.includes("latestRow.updated_at!==expectedUpdatedAt"),
+  "Cloud record edits must compare the version captured when the modal opened and detect stale writes",
+);
+assert.ok(
+  html.includes(".delete().eq('id',id).eq('company_id',companyId).eq('updated_at',current.updated_at)") &&
+    html.includes("latestRow.updated_at!==current.updated_at"),
+  "Cloud record deletes must compare the cached version and refuse to remove a record changed by another user",
+);
+assert.ok(
+  html.includes("احتفظنا بتعديلاتك الحالية") &&
+    html.includes("حدّث الصفحة وافتح السجل مجدداً"),
+  "Stale edit attempts must preserve the open form and explain how to refresh the latest record",
 );
 
 assert.equal(MAX_INVOICE_SIZE, 8 * 1024 * 1024, "Server invoice file limit must remain 8 MiB");
