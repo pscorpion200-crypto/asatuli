@@ -214,6 +214,58 @@ assert.ok(
 );
 
 
+const tripUiStart = html.indexOf("const tripFormFieldIds=");
+const tripUiEnd = html.indexOf("function showDriverView(", tripUiStart);
+assert.ok(tripUiStart >= 0 && tripUiEnd > tripUiStart, "Driver trip submission state block is missing");
+const tripUiSource = html.slice(tripUiStart, tripUiEnd);
+assert.ok(
+  tripUiSource.includes("function tripDraftSnapshot(fields)") &&
+    tripUiSource.includes("let pendingTripSnapshot='';") &&
+    html.includes("pendingTripSnapshot=tripDraftSnapshot(tripFormFields);"),
+  "A fresh idempotency key must capture the current draft fingerprint in memory",
+);
+assert.ok(
+  !tripUiSource.includes("tripFormFields.forEach(field=>['input','change']"),
+  "Editing a trip form must not reset the pending idempotency key",
+);
+assert.ok(
+  tripUiSource.includes("pendingTripSnapshot='';") &&
+    tripUiSource.includes("localStorage.removeItem(pendingTripStorageKey)"),
+  "A pending key and its in-memory draft fingerprint must be reset together after a confirmed outcome",
+);
+const tripSnapshotStart = tripUiSource.indexOf("function tripDraftSnapshot(fields)");
+const tripSnapshotEnd = tripUiSource.indexOf("const pendingTripStorageKey", tripSnapshotStart);
+assert.ok(tripSnapshotStart >= 0 && tripSnapshotEnd > tripSnapshotStart, "Trip draft snapshot helper is missing");
+const tripSnapshotSource = tripUiSource.slice(tripSnapshotStart, tripSnapshotEnd);
+const { tripDraftSnapshot } = new Function(tripSnapshotSource + "; return { tripDraftSnapshot };")();
+const tripDraftFields = [
+  { id: "dpTripDest", value: "عمّان" },
+  { id: "dpTripInvoices", type: "file", files: [{ name: "invoice.pdf", size: 512, lastModified: 10, type: "application/pdf" }] },
+];
+const initialTripSnapshot = tripDraftSnapshot(tripDraftFields);
+tripDraftFields[0].value = "الزرقاء";
+assert.notEqual(
+  tripDraftSnapshot(tripDraftFields),
+  initialTripSnapshot,
+  "Changing trip details after an ambiguous save must be detectable",
+);
+tripDraftFields[0].value = "عمّان";
+tripDraftFields[1].files[0].name = "replacement.pdf";
+assert.notEqual(
+  tripDraftSnapshot(tripDraftFields),
+  initialTripSnapshot,
+  "Replacing an invoice attachment must be detectable as a changed draft",
+);
+const tripSaveHandlerStart = html.indexOf("document.getElementById('dpTripSave').onclick=async()=>");
+const duplicateBranchStart = html.indexOf("if(result.duplicate){", tripSaveHandlerStart);
+const duplicateEarlyReturn = html.indexOf("return;", duplicateBranchStart);
+const duplicateFieldClear = html.indexOf("['dpTripDest','dpTripKm'", duplicateBranchStart);
+assert.ok(
+  tripSaveHandlerStart >= 0 && duplicateBranchStart > tripSaveHandlerStart &&
+    duplicateEarlyReturn > duplicateBranchStart && duplicateEarlyReturn < duplicateFieldClear,
+  "When an earlier attempt is confirmed as saved but the current draft changed, the form must be preserved before the reset path",
+);
+
 const invoiceReview = html.match(
   /<script id="owner-trip-invoice-review">([\s\S]*?)<\/script>/i,
 )?.[1] ?? "";
