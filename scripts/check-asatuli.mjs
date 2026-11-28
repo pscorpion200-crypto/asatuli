@@ -566,6 +566,11 @@ assert.ok(
     html.includes("window.asatuliRefreshScopedLocalData?.()"),
   "Scoped local data restoration must refresh active local modules after successful restoration",
 );
+assert.ok(
+  html.includes("if(parsed.local_scope)throw Error('هذه نسخة مرتبطة بحساب وشركة محددين.") &&
+    html.includes("restoreScopedLocalExtras(parsed)"),
+  "A cloud-scoped backup must not be restored into the unscoped local/demo namespace",
+);
 
 const moduleAccessScriptStart = html.indexOf('<script id="asatuli-module-access-ui">');
 const moduleAccessScriptEnd = html.indexOf("</script>", moduleAccessScriptStart);
